@@ -142,5 +142,8 @@ def grid_sh_synthesis(quantity,min_lat,max_lat,min_lon,max_lon,resolution,shcs_d
         h_ell = np.zeros(h_ell.shape,dtype=np.float64)
 
     points = ph.crd.PointGrid.from_arrays(latitudes.astype(np.float64), longitudes.astype(np.float64), radius.astype(np.float64))
-    coords = {'latitude': np.degrees(latitudes), 'longitude': np.degrees(longitudes)}
+    if ref_surface_type in ['ellipsoid','ell']:
+        coords = {'latitude': lat_ell, 'longitude': np.degrees(longitudes)}
+    else:
+        coords = {'latitude': np.degrees(latitudes), 'longitude': np.degrees(longitudes)}
     return SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data,DTM_shcs_type,lat_ell,h_ell,normal_field_removed),  coords
