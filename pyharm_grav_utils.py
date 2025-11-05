@@ -94,10 +94,15 @@ def read_shcs(shcs_data,shcs_type,nmin=0,nmax=None,GM=None,R=None,ellipsoid=None
     return shcs
 
 
-def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data=None,DTM_shcs_type=None,lat_ell=None,h_ell=None):
+def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data=None,DTM_shcs_type=None,lat_ell=None,h_ell=None,normal_field_removed = False):
     grid = True if isinstance(points,ph.crd.PointGrid) else False
     omega = ellipsoid.omega         # Earth's angular velocity in rad/s
     eotvos_scale = 1e9              # scale factor for gravity gradients to Eötvös unit
+
+    if normal_field_removed == True and (quantity in ['V','topo','W','g', 'g_abs','V_xz' , 'W_xz','V_yz' , 'V_zz' , 'W_zz'\
+                                     'W_yz','V_xy' , 'W_xy','V_yy' , 'W_yy','V_xx' , 'W_xx', 'V_delta' , 'W_delta']) :
+        raise ValueError('Without normal field, cannot compute this functional')
+
     # Potential unit: m^2/s^2
     if grid==False:
         points_r = points.r
@@ -115,7 +120,8 @@ def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_d
         return potential
     
     elif quantity == 'T':   # disturbing potential
-        ellipsoid.subtract_normal_field(shcs,nmin)
+        if normal_field_removed == False:
+            ellipsoid.subtract_normal_field(shcs,nmin)
         potential = ph.shs.point(points,shcs,nmax)
         return potential
     
@@ -128,7 +134,8 @@ def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_d
     elif quantity == 'dg':
         # Gravity anomaly with spherical approximation, result is in mGal
         # validated with GEOCOL
-        ellipsoid.subtract_normal_field(shcs,nmin)
+        if normal_field_removed == False:
+            ellipsoid.subtract_normal_field(shcs,nmin)
         # extract coefficients and indexes
         index = np.arange(0,nmax+1,1)
         n_index, m_index = np.meshgrid(index, index,indexing='ij')
@@ -150,7 +157,8 @@ def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_d
         return dg
     
     elif quantity == 'dg_dist':
-        ellipsoid.subtract_normal_field(shcs,nmin)
+        if normal_field_removed == False:
+            ellipsoid.subtract_normal_field(shcs,nmin)
         dg_dr = ph.shs.point_guru(pnt=points,shcs=shcs,nmax=nmax,dr=1,dlat=0,dlon=0)
         return -1e5 * dg_dr
     
@@ -170,7 +178,8 @@ def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_d
     # Horizontal gradients
     elif quantity in ['T_xz', 'V_xz' , 'W_xz']:
         if quantity == 'T_xz':
-            ellipsoid.subtract_normal_field(shcs,nmin)
+            if normal_field_removed == False:
+                ellipsoid.subtract_normal_field(shcs,nmin)
         #T_xz = (1 / r) * f(0,1,0) - f(1,1,0)
         grad_xz = (1 / points_r) * ph.shs.point_guru(pnt=points,shcs=shcs,nmax=nmax,dr=0,dlat=1,dlon=0) \
              - ph.shs.point_guru(pnt=points,shcs=shcs,nmax=nmax,dr=1,dlat=1,dlon=0)
@@ -199,7 +208,8 @@ def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_d
     
     elif quantity in ['T_xx', 'V_xx' , 'W_xx']:
         if quantity == 'T_xx':
-            ellipsoid.subtract_normal_field(shcs,nmin)
+            if normal_field_removed == False:
+                ellipsoid.subtract_normal_field(shcs,nmin)
         #T_xx = 1/r *f(1,0,0) + f(0,2,0)
         grad_xx = 1/points_r * ph.shs.point_guru(pnt=points,shcs=shcs,nmax=nmax,dr=1,dlat=0,dlon=0) \
                 + ph.shs.point_guru(pnt=points,shcs=shcs,nmax=nmax,dr=0,dlat=2,dlon=0)
@@ -209,7 +219,8 @@ def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_d
     
     elif quantity in ['T_yy', 'V_yy' , 'W_yy']:
         if quantity == 'T_yy':
-            ellipsoid.subtract_normal_field(shcs,nmin)
+            if normal_field_removed == False:
+                ellipsoid.subtract_normal_field(shcs,nmin)
         #T_yy = 1/r *f(1,0,0) + tan(phi)/r*f(0,1,0) + f(0,0,2)
         grad_yy = 1/points_r * ph.shs.point_guru(pnt=points,shcs=shcs,nmax=nmax,dr=1,dlat=0,dlon=0) \
                 + np.tan(np.radians(points_lat))/points_r * ph.shs.point_guru(pnt=points,shcs=shcs,nmax=nmax,dr=0,dlat=1,dlon=0) \
@@ -220,7 +231,8 @@ def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_d
     
     elif quantity in ['T_delta', 'V_delta' , 'W_delta']:
         if quantity == 'T_delta':
-            ellipsoid.subtract_normal_field(shcs,nmin)
+            if normal_field_removed == False:
+                ellipsoid.subtract_normal_field(shcs,nmin)
         #T_delta =  tan(phi)/r*f(0,1,0) + f(0,0,2) - f(0,2,0)
         grad_delta = np.tan(np.radians(points_lat))/points_r*ph.shs.point_guru(pnt=points,shcs=shcs,nmax=nmax,dr=0,dlat=1,dlon=0)\
             + ph.shs.point_guru(pnt=points,shcs=shcs,nmax=nmax,dr=0,dlat=0,dlon=2) \
@@ -232,7 +244,8 @@ def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_d
     # Vertical gradient
     elif quantity in ['T_zz', 'V_zz' , 'W_zz']:
         if quantity == 'T_zz':
-            ellipsoid.subtract_normal_field(shcs,nmin)
+            if normal_field_removed == False:
+                ellipsoid.subtract_normal_field(shcs,nmin)
         #T_zz = f(2,0,0)
         grad_zz = ph.shs.point_guru(pnt=points,shcs=shcs,nmax=nmax,dr=2,dlat=0,dlon=0)
         if quantity == 'W_zz':
@@ -242,7 +255,8 @@ def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_d
     elif quantity in ['N','zeta','zeta_ell']:
         if points_type in ['spherical','sph']:
             raise ValueError('Ellipsoidal coordinates must be given!')
-        ellipsoid.subtract_normal_field(shcs,nmin)    # normal field removed from coefficients
+        if normal_field_removed == False:
+            ellipsoid.subtract_normal_field(shcs,nmin)    # normal field removed from coefficients
         #if quantity == 'zeta':
             #  set heights to 0 (r to ellipsoidal radius)
             #r_ell = geod2geoc(lat_ell,longitude,np.zeros(lat_ell.length()))

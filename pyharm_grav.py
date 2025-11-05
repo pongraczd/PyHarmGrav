@@ -6,7 +6,7 @@ import warnings
 from normal_grav_field import Ellipsoid
 
 ### FUNCTION FOR HS SYNTHESIS AT POINT
-def point_sh_synthesis(points,shcs_data,points_type,quantity,shcs_type=None,nmin=0,nmax=None,ellipsoid=None,GM=None,R=None,DTM_shcs_data=None,DTM_shcs_type=None):
+def point_sh_synthesis(points,shcs_data,points_type,quantity,shcs_type=None,nmin=0,nmax=None,ellipsoid=None,GM=None,R=None,DTM_shcs_data=None,DTM_shcs_type=None,normal_field_removed = False):
     # HANDLE DEFAULT VALUES FOR OPTIONAL PARAMETERS ------------------------------------------------------------------
     ellipsoid  = Ellipsoid(ellipsoid)
     # get shcs_type from file extension if not provided
@@ -59,10 +59,10 @@ def point_sh_synthesis(points,shcs_data,points_type,quantity,shcs_type=None,nmin
 
     # SYNTHESIS OF DIFFERENT QUANTITIES -------------------------------------------------------------------------------
     # synthesis moved to separate function and handle grid setup,  synthesis function is generalized for both scatttered points and grid
-    return SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data,DTM_shcs_type,lat_ell,h_ell)
+    return SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data,DTM_shcs_type,lat_ell,h_ell,normal_field_removed)
 
 ### FUNCTION FOR HS SYNTHESIS ON GRID
-def grid_sh_synthesis(quantity,min_lat,max_lat,min_lon,max_lon,resolution,shcs_data,resolution_unit='degrees',nmin=0,nmax=None,ellipsoid=None,shcs_type=None,ref_surface_type='ellipsoid',height=0,ref_radius=None,GM=None,R=None,DTM_shcs_data=None,DTM_shcs_type=None):
+def grid_sh_synthesis(quantity,min_lat,max_lat,min_lon,max_lon,resolution,shcs_data,resolution_unit='degrees',nmin=0,nmax=None,ellipsoid=None,shcs_type=None,ref_surface_type='ellipsoid',height=0,ref_radius=None,GM=None,R=None,DTM_shcs_data=None,DTM_shcs_type=None,normal_field_removed = False):
 
     # HANDLE DEFAULT VALUES FOR OPTIONAL PARAMETERS ------------------------------------------------------------------
     ellipsoid  = Ellipsoid(ellipsoid)
@@ -143,4 +143,4 @@ def grid_sh_synthesis(quantity,min_lat,max_lat,min_lon,max_lon,resolution,shcs_d
 
     points = ph.crd.PointGrid.from_arrays(latitudes.astype(np.float64), longitudes.astype(np.float64), radius.astype(np.float64))
     coords = {'latitude': np.degrees(latitudes), 'longitude': np.degrees(longitudes)}
-    return SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data,DTM_shcs_type,lat_ell,h_ell),  coords
+    return SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data,DTM_shcs_type,lat_ell,h_ell,normal_field_removed),  coords
