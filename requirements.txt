@@ -1,0 +1,8 @@
+numpy
+pyharm
+xarray
+rioxarray
+scipy
+matplotlib
+h5py
+PyQt5
