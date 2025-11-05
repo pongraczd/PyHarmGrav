@@ -1,10 +1,10 @@
-from pyharm_grav import point_sh_synthesis, grid_sh_synthesis
+from pyharmgrav import point_sh_synthesis, grid_sh_synthesis
 import numpy as np
 
-gpm_path = "./sample_input_data/EGM96.mat"
-points_path = "./sample_input_data/sample_points.txt"
-dtm_path = "./sample_input_data/DTM2006.mat"
-points0_path = "./sample_input_data/sample_points_h0.txt"
+gpm_path = "./pyharmgrav/sample_input_data/EGM96.mat"
+points_path = "./pyharmgrav/sample_input_data/sample_points.txt"
+dtm_path = "./pyharmgrav/sample_input_data/DTM2006.mat"
+points0_path = "./pyharmgrav/sample_input_data/sample_points_h0.txt"
 GM = 3986004.415E+8
 R = 6378136.3
 
