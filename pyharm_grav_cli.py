@@ -93,31 +93,5 @@ def main():
     args = parser.parse_args()
     args.func(args)
     
-    """data_in_file = np.loadtxt(points)
-    datafile_ext = os.path.splitext(points)[1]
-    if nmax is None:
-        nmax = ph.shc.Shc.nmax_from_file('gfc',model_path)
-    shcs = ph.shc.Shc.from_file('gfc', model_path, nmax)
-    if point_number:
-        point_coords = data_in_file[:,1:]
-    else:
-        point_coords = data_in_file
-    model_name = os.path.basename(model_path).replace('.gfc', '')
-    print(f"Model name: {model_name}, nmax: {nmax}, ellipsoid: {ellipsoid}, points type: {points_type}, quantity: {quantity}")
-    start = time.time()
-    print(f'Computation started at {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start))}')
-    output_quantity = point_synthesis(points=point_coords,shcs=shcs,nmax=nmax,points_type=points_type,ellipsoid=ellipsoid,quantity=quantity)
-    #if output_quantity.ndim == 1:
-    output_quantity = output_quantity.reshape(-1, 1)
-    end = time.time()
-    print(f'Computation ended at {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(end))}')
-    formatted_duration = str(timedelta(seconds=(end - start)))
-    print(f"Computation time for synthesis of {quantity}: {formatted_duration}")
-    output_arr = np.hstack((data_in_file, output_quantity))
-    output_file = os.path.splitext(points)[0] + f'_{model_name}_{nmax}_{quantity}{datafile_ext}'
-    output_format = '%.8f %.8f %.3f ' + output_format_quantity(quantity)
-    if point_number:
-        output_format = '%d ' + output_format
-    np.savetxt(output_file, output_arr, fmt=output_format)"""
 if __name__ == '__main__':
     main()
