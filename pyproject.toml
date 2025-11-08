@@ -5,6 +5,6 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pyharmgrav"
 version = "0.1"
-dependencies = ["numpy","pyharm","xarray","rioxarray","scipy","h5py","PyQt5"]
+dependencies = ["numpy","pyharm","xarray","rioxarray","scipy","h5py","PyQt5","netCDF4"]
 [project.scripts]
 pyharmgrav = "pyharmgrav.pyharm_grav_cli:main"

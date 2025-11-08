@@ -6,3 +6,4 @@ scipy
 matplotlib
 h5py
 PyQt5
+netCDF4
