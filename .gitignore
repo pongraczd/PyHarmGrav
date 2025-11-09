@@ -2,3 +2,4 @@ __pycache__/
 doc/
 pyharmgrav.egg-info/
 pyharmgrav/pyharm_GUI.py
+grav.yml
