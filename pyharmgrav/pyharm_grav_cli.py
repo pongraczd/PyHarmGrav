@@ -1,5 +1,5 @@
 import numpy as np 
-from .pyharm_grav import point_sh_synthesis, grid_sh_synthesis
+from .pyharm_grav_shs import point_sh_synthesis, grid_sh_synthesis
 import argparse
 import sys
 

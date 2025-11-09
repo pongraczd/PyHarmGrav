@@ -1,6 +1,6 @@
 import pyharm as ph
 import numpy as np
-from .pyharm_grav_utils import read_shcs, geod2geoc, SH_synthesis
+from .pyharm_grav_shs_utils import read_shcs, geod2geoc, SH_synthesis
 from os.path import splitext
 import warnings
 from .normal_grav_field import Ellipsoid
