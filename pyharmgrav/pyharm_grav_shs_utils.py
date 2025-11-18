@@ -96,7 +96,10 @@ def read_shcs(shcs_data,shcs_type,nmin=0,nmax=None,GM=None,R=None,ellipsoid=None
 
 def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data=None,DTM_shcs_type=None,lat_ell=None,h_ell=None,normal_field_removed = False):
     grid = True if isinstance(points,ph.crd.PointGrid) else False
-    omega = ellipsoid.omega         # Earth's angular velocity in rad/s
+    if ellipsoid is not None:
+        omega = ellipsoid.omega         # Earth's angular velocity in rad/s
+    else:
+        omega = 7.292115e-05  
     eotvos_scale = 1e9              # scale factor for gravity gradients to Eötvös unit
 
     if normal_field_removed == True and (quantity in ['V','topo','W','g', 'g_abs','V_xz' , 'W_xz','V_yz' , 'V_zz' , 'W_zz'\
@@ -253,7 +256,7 @@ def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_d
         return eotvos_scale * grad_zz
     
     elif quantity in ['N','zeta','zeta_ell']:
-        if points_type in ['spherical','sph']:
+        if points_type in ['spherical','sph'] and quantity != 'zeta_ell':
             raise ValueError('Ellipsoidal coordinates must be given!')
         if normal_field_removed == False:
             ellipsoid.subtract_normal_field(shcs,nmin)    # normal field removed from coefficients
@@ -263,26 +266,35 @@ def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_d
             #points_ell = ph.crd.PointGrid.from_arrays(latitude, longitude, r_ell)
 
         T = ph.shs.point(points,shcs,nmax)
-        a = ellipsoid.a
-        fEl = ellipsoid.f
-        esq = (ellipsoid.e)**2
-        gamma_e = ellipsoid.gamma_e
-        k = ellipsoid.k
-        m = ellipsoid.m
+        if ellipsoid is not None:
+            a = ellipsoid.a
+            fEl = ellipsoid.f
+            esq = (ellipsoid.e)**2
+            gamma_e = ellipsoid.gamma_e
+            k = ellipsoid.k
+            m = ellipsoid.m
         
-        if grid:
+        if grid and ellipsoid:
             h_ell = np.repeat(h_ell.reshape(-1,1),len(points.lon),axis=1)
-        gamma0 = gamma_e*(1+k*(np.sin(np.radians(lat_ell)))**2)/np.sqrt(1-esq*(np.sin(np.radians(lat_ell)))**2)
+        if ellipsoid is not None:
+            gamma0 = gamma_e*(1+k*(np.sin(np.radians(lat_ell)))**2)/np.sqrt(1-esq*(np.sin(np.radians(lat_ell)))**2)
+        else:
+            gamma0 = shcs.mu / shcs.r**2
         # TODO : implement gamma0 from spherical coordinates
 
-        if (DTM_shcs_data is None) and (quantity == 'N' or h_ell.max()<1e-10):
-            raise ValueError("DTM is required for geoid undulation or height anomaly")
+       
 
         if quantity == 'zeta_ell':
-            fac = 1-2/a*(1+fEl+m-2*fEl*(np.sin(np.radians(lat_ell)))**2)*h_ell+3*h_ell**2/(a**2)
-            gamma_h = gamma0*fac
+            if ellipsoid is not None:
+                fac = 1-2/a*(1+fEl+m-2*fEl*(np.sin(np.radians(lat_ell)))**2)*h_ell+3*h_ell**2/(a**2)
+            else:
+                fac = 1
+            gamma_h = gamma0*fac  
             zeta_ell = T / gamma_h # ellipsoidal height can be nonzero, T and gamma_h refers to the actual height of point on surface
             return zeta_ell
+        
+        if (DTM_shcs_data is None) and (quantity == 'N' or h_ell.max()<1e-10):
+            raise ValueError("DTM is required for geoid undulation or height anomaly")
 
         if quantity in ['zeta_ell','zeta']:
             zeta_ell_0 = T / gamma0 # ellipsoidal height is 0, T and gamma0 refer to ellipsoid

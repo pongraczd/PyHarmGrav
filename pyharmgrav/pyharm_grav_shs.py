@@ -8,7 +8,8 @@ from .normal_grav_field import Ellipsoid
 ### FUNCTION FOR HS SYNTHESIS AT POINT
 def point_sh_synthesis(points,shcs_data,points_type,quantity,shcs_type=None,nmin=0,nmax=None,ellipsoid=None,GM=None,R=None,DTM_shcs_data=None,DTM_shcs_type=None,normal_field_removed = False):
     # HANDLE DEFAULT VALUES FOR OPTIONAL PARAMETERS ------------------------------------------------------------------
-    ellipsoid  = Ellipsoid(ellipsoid)
+    if ellipsoid is not None:
+        ellipsoid  = Ellipsoid(ellipsoid)
     # get shcs_type from file extension if not provided
     if shcs_type is None:
         shcs_type = splitext(shcs_data)[1][1:]  # remove the dot
@@ -65,7 +66,8 @@ def point_sh_synthesis(points,shcs_data,points_type,quantity,shcs_type=None,nmin
 def grid_sh_synthesis(quantity,min_lat,max_lat,min_lon,max_lon,resolution,shcs_data,resolution_unit='degrees',nmin=0,nmax=None,ellipsoid=None,shcs_type=None,ref_surface_type='ellipsoid',height=0,ref_radius=None,GM=None,R=None,DTM_shcs_data=None,DTM_shcs_type=None,normal_field_removed = False):
 
     # HANDLE DEFAULT VALUES FOR OPTIONAL PARAMETERS ------------------------------------------------------------------
-    ellipsoid  = Ellipsoid(ellipsoid)
+    if ellipsoid is not None:
+        ellipsoid  = Ellipsoid(ellipsoid)
     # get shcs_type from file extension if not provided
     if shcs_type is None:
         shcs_type = splitext(shcs_data)[1][1:]  # remove the dot
@@ -137,7 +139,7 @@ def grid_sh_synthesis(quantity,min_lat,max_lat,min_lon,max_lon,resolution,shcs_d
         #    shcs.rescale(mu=1)  # if R scale factor is provided, only set GM to 1
         radius[:] = R # r is also set to 1 in shcs for topography synthesis, so upward continuation term becomes 1
 
-    if quantity in ['zeta','N','zeta_ell'] and h_ell.max()>1e-6:
+    if quantity in ['zeta', 'N', 'zeta_ell'] and (h_ell is not None and h_ell.max() > 1e-6):
         warnings.warn('height must be set to zero for computing geoid / height anomaly on a grid. Setting height to 0 ...', UserWarning)
         h_ell = np.zeros(h_ell.shape,dtype=np.float64)
 

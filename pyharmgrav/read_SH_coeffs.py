@@ -120,7 +120,7 @@ def read_dat(file_path,GM=1,R=1,nmax=None):
     """
     # Read raw data from file
     raw_data = np.loadtxt(file_path)
-    SHCs = table_to_shcs(raw_data,GM,R)
+    SHCs = table_to_shcs(raw_data,GM,R,nmax)
     return SHCs
 
 def read_mat(file_path,GM=1,R=1,nmax=None):

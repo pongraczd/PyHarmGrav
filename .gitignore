@@ -3,3 +3,7 @@ doc/
 pyharmgrav.egg-info/
 pyharmgrav/pyharm_GUI.py
 grav.yml
+tesseroid_test/
+input_data/EIGEN-6C4.gfc
+.ipynb_checkpoints/
+pyharmgrav/.ipynb_checkpoints/
