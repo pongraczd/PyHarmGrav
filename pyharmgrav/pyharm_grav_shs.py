@@ -6,13 +6,13 @@ import warnings
 from .normal_grav_field import Ellipsoid
 
 ### FUNCTION FOR HS SYNTHESIS AT POINT
-def point_sh_synthesis(points,shcs_data,points_type,quantity,shcs_type=None,nmin=0,nmax=None,ellipsoid=None,GM=None,R=None,DTM_shcs_data=None,DTM_shcs_type=None,normal_field_removed = False):
+def point_sh_synthesis(points,shcs_data,points_type,quantity,nmin=0,nmax=None,ellipsoid=None,GM=None,R=None,DTM_shcs_data=None,normal_field_removed = False):
     # HANDLE DEFAULT VALUES FOR OPTIONAL PARAMETERS ------------------------------------------------------------------
     if ellipsoid is not None:
         ellipsoid  = Ellipsoid(ellipsoid)
     # get shcs_type from file extension if not provided
-    if shcs_type is None:
-        shcs_type = splitext(shcs_data)[1][1:]  # remove the dot
+    #if shcs_type is None:
+    shcs_type = splitext(shcs_data)[1][1:]  # remove the dot
     if shcs_type not in ['gfc','dat','bshc','bin','mtx','tbl','dov','mat']:   # rewrite if new format added
         raise ValueError("Not recognised file format. it must be one of these: 'gfc','dat','bshc','bin','mtx','tbl','dov','mat'  ")
     # get nmax from file if not provided and parser requires it    
@@ -60,17 +60,16 @@ def point_sh_synthesis(points,shcs_data,points_type,quantity,shcs_type=None,nmin
 
     # SYNTHESIS OF DIFFERENT QUANTITIES -------------------------------------------------------------------------------
     # synthesis moved to separate function and handle grid setup,  synthesis function is generalized for both scatttered points and grid
-    return SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data,DTM_shcs_type,lat_ell,h_ell,normal_field_removed)
+    return SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data,lat_ell,h_ell,normal_field_removed)
 
 ### FUNCTION FOR HS SYNTHESIS ON GRID
-def grid_sh_synthesis(quantity,min_lat,max_lat,min_lon,max_lon,resolution,shcs_data,resolution_unit='degrees',nmin=0,nmax=None,ellipsoid=None,shcs_type=None,ref_surface_type='ellipsoid',height=0,ref_radius=None,GM=None,R=None,DTM_shcs_data=None,DTM_shcs_type=None,normal_field_removed = False):
-
+def grid_sh_synthesis(quantity,min_lat,max_lat,min_lon,max_lon,resolution,shcs_data,resolution_unit='degrees',nmin=0,nmax=None,ellipsoid=None,ref_surface_type='ellipsoid',height=0,ref_radius=None,GM=None,R=None,DTM_shcs_data=None,normal_field_removed = False):
     # HANDLE DEFAULT VALUES FOR OPTIONAL PARAMETERS ------------------------------------------------------------------
     if ellipsoid is not None:
         ellipsoid  = Ellipsoid(ellipsoid)
     # get shcs_type from file extension if not provided
-    if shcs_type is None:
-        shcs_type = splitext(shcs_data)[1][1:]  # remove the dot
+    #if shcs_type is None:
+    shcs_type = splitext(shcs_data)[1][1:]  # remove the dot
     if shcs_type not in ['gfc','dat','bshc','bin','mtx','tbl','dov','mat']:   # rewrite if new format added
         raise ValueError("Not recognised file format. it must be one of these: 'gfc','dat','bshc','bin','mtx','tbl','dov','mat' ")
     # get nmax from file if not provided and parser requires it    
@@ -148,4 +147,4 @@ def grid_sh_synthesis(quantity,min_lat,max_lat,min_lon,max_lon,resolution,shcs_d
         coords = {'latitude': lat_ell, 'longitude': np.degrees(longitudes)}
     else:
         coords = {'latitude': np.degrees(latitudes), 'longitude': np.degrees(longitudes)}
-    return SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data,DTM_shcs_type,lat_ell,h_ell,normal_field_removed),  coords
+    return SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data,lat_ell,h_ell,normal_field_removed),  coords

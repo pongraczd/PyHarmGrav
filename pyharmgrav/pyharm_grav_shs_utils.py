@@ -94,7 +94,7 @@ def read_shcs(shcs_data,shcs_type,nmin=0,nmax=None,GM=None,R=None,ellipsoid=None
     return shcs
 
 
-def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data=None,DTM_shcs_type=None,lat_ell=None,h_ell=None,normal_field_removed = False):
+def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data=None,lat_ell=None,h_ell=None,normal_field_removed = False):
     grid = True if isinstance(points,ph.crd.PointGrid) else False
     if ellipsoid is not None:
         omega = ellipsoid.omega         # Earth's angular velocity in rad/s
@@ -303,8 +303,8 @@ def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_d
         #topo = point_sh_synthesis(points,DTM_shcs,points_type,'topo',shcs_type=DTM_shcs_type,nmax=DTM_nmax,ellipsoid=ellipsoid,GM=1,R=None)
         
         if quantity == 'N' or h_ell.max()<1e-10:
-            if DTM_shcs_type is None:
-                DTM_shcs_type = splitext(DTM_shcs_data)[1][1:]  # remove the dot
+            #if DTM_shcs_type is None:
+            DTM_shcs_type = splitext(DTM_shcs_data)[1][1:]  # remove the dot
             DTM_shcs = read_shcs(DTM_shcs_data,DTM_shcs_type,0,nmax,ellipsoid=ellipsoid,GM=1,R=1)
             radius = points.r
             radius_topo = radius.copy()
