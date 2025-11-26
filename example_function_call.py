@@ -24,4 +24,6 @@ print(result2)
 #example 4: point synthesis with nmin + nmax, dg
 result3 = point_sh_synthesis(points,gpm_path,'ellipsoidal','dg',10,None,'GRS80',GM,R,dtm_path)
 print(result3)
-#TODO :  , log file, create GUI
+#example 5: point synthesis with nmin + nmax, dg
+result4 = point_sh_synthesis(points,gpm_path,'ellipsoidal','xi',0,None,'GRS80',GM,R)
+print(result4)

@@ -256,7 +256,7 @@ def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_d
         return eotvos_scale * grad_zz
     
     elif quantity in ['N','zeta','zeta_ell']:
-        if points_type in ['spherical','sph'] and quantity != 'zeta_ell':
+        if (points_type in ['spherical','sph']) and (quantity != 'zeta_ell' or normal_field_removed == False):
             raise ValueError('Ellipsoidal coordinates must be given!')
         if normal_field_removed == False:
             ellipsoid.subtract_normal_field(shcs,nmin)    # normal field removed from coefficients
@@ -296,7 +296,7 @@ def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_d
         if (DTM_shcs_data is None) and (quantity == 'N' or h_ell.max()<1e-10):
             raise ValueError("DTM is required for geoid undulation or height anomaly")
 
-        if quantity in ['zeta_ell','zeta']:
+        if quantity == 'zeta':
             zeta_ell_0 = T / gamma0 # ellipsoidal height is 0, T and gamma0 refer to ellipsoid
 
         
@@ -326,3 +326,31 @@ def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_d
             dg_dr = ph.shs.point_guru(pnt=points,shcs=shcs,nmax=nmax,dr=1,dlat=0,dlon=0) #compute delta_g
             zeta = zeta_ell_0 + dg_dr *(h_ell) / gamma0
             return zeta
+    ## deflections of vertical
+    elif quantity in ['xi','eta','theta']:
+        if (points_type in ['spherical','sph']) and (quantity != 'zeta_ell' or normal_field_removed == False):
+            raise ValueError('Ellipsoidal coordinates must be given!')
+        a = ellipsoid.a
+        fEl = ellipsoid.f
+        esq = (ellipsoid.e)**2
+        gamma_e = ellipsoid.gamma_e
+        k = ellipsoid.k
+        m = ellipsoid.m
+        if grid:
+            h_ell = np.repeat(h_ell.reshape(-1,1),len(points.lon),axis=1)
+        gamma0 = gamma_e*(1+k*(np.sin(np.radians(lat_ell)))**2)/np.sqrt(1-esq*(np.sin(np.radians(lat_ell)))**2)
+        fac = 1-2/a*(1+fEl+m-2*fEl*(np.sin(np.radians(lat_ell)))**2)*h_ell+3*h_ell**2/(a**2)
+        gamma_h = gamma0*fac 
+        ellipsoid.subtract_normal_field(shcs,nmin)
+        rad2sec = 180/np.pi * 3600
+        if quantity == 'xi':
+            xi = -1/gamma_h * ph.shs.point_guru(pnt=points,shcs=shcs,nmax=nmax,dr=0,dlat=1,dlon=0)
+            return xi * rad2sec
+        elif quantity == 'eta':
+            eta = -1/gamma_h * ph.shs.point_guru(pnt=points,shcs=shcs,nmax=nmax,dr=0,dlat=0,dlon=1)
+            return eta * rad2sec
+        elif quantity == 'theta':
+            xi = -1/gamma_h * ph.shs.point_guru(pnt=points,shcs=shcs,nmax=nmax,dr=0,dlat=1,dlon=0)
+            eta = -1/gamma_h * ph.shs.point_guru(pnt=points,shcs=shcs,nmax=nmax,dr=0,dlat=0,dlon=1)
+            theta = np.sqrt(xi**2+eta**2)
+            return theta * rad2sec
