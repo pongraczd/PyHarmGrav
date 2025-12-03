@@ -44,7 +44,7 @@ def point_sh_synthesis(points,shcs_data,points_type,quantity,nmin=0,nmax=None,el
                     warnings.warn('Heights are non-zero for computing height anomaly, they are used instead of DEM. If you want to use DEM rather, \
                             set them to zero or not specify heights at all.',UserWarning)
         lat_ell = (points[:,0]).copy()
-        h_ell = np.zeros(points.shape[1]) if points.shape[1]==2 else (points[:,2]).copy()
+        h_ell = np.zeros(points.shape[0]) if points.shape[1]==2 else (points[:,2]).copy()
         points = geod2geoc(points,ellipsoid)
     else:
         raise ValueError("Coordinate type not recognised")
