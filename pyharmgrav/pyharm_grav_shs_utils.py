@@ -286,7 +286,6 @@ def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_d
 
         if quantity == 'zeta_ell':
             if ellipsoid is not None:
-                print(h_ell)
                 fac = 1-2/a*(1+fEl+m-2*fEl*(np.sin(np.radians(lat_ell)))**2)*h_ell+3*h_ell**2/(a**2)
             else:
                 fac = 1
