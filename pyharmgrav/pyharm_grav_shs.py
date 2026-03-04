@@ -63,7 +63,7 @@ def point_sh_synthesis(points,shcs_data,points_type,quantity,nmin=0,nmax=None,el
     return SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data,lat_ell,h_ell,normal_field_removed)
 
 ### FUNCTION FOR HS SYNTHESIS ON GRID
-def grid_sh_synthesis(quantity,min_lat,max_lat,min_lon,max_lon,resolution,shcs_data,resolution_unit='degrees',nmin=0,nmax=None,ellipsoid=None,ref_surface_type='ellipsoid',height=0,ref_radius=None,GM=None,R=None,DTM_shcs_data=None,normal_field_removed = False):
+def grid_sh_synthesis(quantity,min_lat,max_lat,min_lon,max_lon,resolution,shcs_data,resolution_unit='degrees',nmin=0,nmax=None,ellipsoid=None,ref_surface_type='ellipsoid',height=0,GM=None,R=None,DTM_shcs_data=None,normal_field_removed = False):
     # HANDLE DEFAULT VALUES FOR OPTIONAL PARAMETERS ------------------------------------------------------------------
     if ellipsoid is not None:
         ellipsoid  = Ellipsoid(ellipsoid)
