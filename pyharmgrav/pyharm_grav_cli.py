@@ -26,6 +26,12 @@ def calc_grid(config):
         result_ds = xr.DataArray(result,coords,name=params['quantity'])
         result_ds.rio.write_crs(4326, inplace=True)
         result_ds.to_netcdf(outfile)
+    elif outfile.endswith('.tif'):
+        import xarray as xr
+        import rioxarray
+        result_ds = xr.DataArray(result,coords,name=params['quantity']).astype("float32")
+        result_ds.rio.write_crs(4326, inplace=True)
+        result_ds.rio.to_raster(outfile)
     elif outfile.endswith('.dat') or outfile.endswith('.txt'):
         lat_grid = np.repeat((coords['latitude']).reshape(-1,1),len(coords['longitude']),axis=1)
         lon_grid = np.repeat(np.expand_dims(coords['longitude'],0),len(coords['latitude']),axis=0)

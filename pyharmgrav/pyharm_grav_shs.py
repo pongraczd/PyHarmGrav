@@ -99,7 +99,7 @@ def grid_sh_synthesis(quantity,min_lat,max_lat,min_lon,max_lon,resolution,shcs_d
     if resolution_unit in ['m','min','minutes']:
         lat_resolution /= 60
         lon_resolution /= 60
-    elif resolution_unit == ['s','sec','seconds']:
+    elif resolution_unit in ['s','sec','seconds']:
         lat_resolution /= 3600
         lon_resolution /= 3600
     latitudes = np.arange(max_lat,min_lat-lat_resolution/2,-1*lat_resolution) # step is negative to have latitudes in descending order
@@ -120,7 +120,8 @@ def grid_sh_synthesis(quantity,min_lat,max_lat,min_lon,max_lon,resolution,shcs_d
         points_type = 'ellipsoidal'
         
     elif ref_surface_type in ['sphere','sph']:
-        ref_radius = 6378137 if ref_radius is None else ref_radius
+        #ref_radius = 6378137 if ref_radius is None else ref_radius
+        ref_radius = shcs.r
         sphere_radii = np.ones(len(latitudes))*(ref_radius+height)
         points_type = 'spherical'
         lat_ell = None
