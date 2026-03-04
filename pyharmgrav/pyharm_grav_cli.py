@@ -75,9 +75,14 @@ def calc_point(config):
         out_format = out_format.strip()
     else:
         result = point_sh_synthesis(**params)
-        result = result.reshape(-1,1)
+        if result.ndim == 1:
+            result = result.reshape(-1,1)
         if point_numbers:
-            out_format = '%d %.8f %.8f %.3f %.12e'
+            if params['quantity'] == 'g':
+                out_format = '%d %.8f %.8f %.3f %.12e %.12e %.12e'
+            #elif quantity == ''
+            else:
+                out_format = '%d %.8f %.8f %.3f %.12e'
         else:
             out_format = '%.8f %.8f %.3f %.12e'
     output_array = np.hstack((data_in_file, result))

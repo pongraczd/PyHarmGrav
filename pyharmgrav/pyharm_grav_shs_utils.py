@@ -4,8 +4,9 @@ import numpy as np
 from .read_SH_coeffs import read_bhsc, read_dat, read_mat
 from os.path import splitext
 import warnings
+from numpy.typing import NDArray
 
-def geod2geoc(lla,ellipsoid):
+def geod2geoc(lla: NDArray[np.float64], ellipsoid: Ellipsoid) -> NDArray[np.float64]:
     """Convert geodetic coordinates to geocentric.
     Parameters
     ----------  
@@ -25,16 +26,9 @@ def geod2geoc(lla,ellipsoid):
     elif lla.shape[1] > 3 or lla.shape[1] < 2:
         raise ValueError('array `lla` must have 2 or 3 columns')
     
-    #ellipsoid = ellipsoid.lower().strip()
+
     # ensure dtype is float64
     lla = lla.astype(np.float64)
-    #if ellipsoid == 'wgs84':
-    #    a = 6378137 
-    #    fEl = 1/298.257223563                 # Flattening of WGS84
-    #    esq = fEl*(2-fEl)
-    #elif ellipsoid == 'grs80':
-    #    a = 6378137 
-    #    esq = 0.006694380022903416 
 
     a = ellipsoid.a
     esq = (ellipsoid.e)**2
@@ -49,7 +43,48 @@ def geod2geoc(lla,ellipsoid):
     return np.concatenate((sph_lat, lla[:,1], r)).reshape(lla.shape, order='F')
 
 
-def read_shcs(shcs_data,shcs_type,nmin=0,nmax=None,GM=None,R=None,ellipsoid=None):
+def read_shcs(shcs_data : str ,shcs_type : str ,nmin : int = 0,nmax : int|None = None,GM : float|None = None,R : float|None = None,ellipsoid : Ellipsoid|None = None) -> ph.shc.Shc:
+    """
+    Read spherical harmonic coefficients (SHCs) from various file formats.
+    Parameters
+    ----------
+    shcs_data : str
+        Path to the file containing spherical harmonic coefficients or the data itself.
+    shcs_type : str
+        Type of file format. Supported formats include:
+        - 'gfc', 'bin', 'mtx', 'tbl', 'dov': PyHarm-recognized formats
+        - 'bshc': Binary format used by Curtin University
+        - 'dat': text file with columns for degree, order, Cnm, Snm
+        - 'mat': MATLAB .mat file
+    nmin : int, optional
+        Minimum degree. Coefficients with degree less than nmin will be set to zero.
+        Default is 0 (no truncation).
+    nmax : int, optional
+        Maximum degree to read. If None, all available coefficients are read.
+        Default is None.
+    GM : float, optional
+        Geocentric gravitational constant. If not provided, tries to read it from file given in shcs_data,
+        if it is not possible, defaults to value from GRS80 reference system. Default is None.
+    R : float, optional
+        Reference radius in meters. If not provided, tries to read it from file given in shcs_data,
+        if it is not possible, defaults to value from GRS80 reference system. Default is None.
+    ellipsoid : Ellipsoid, optional
+        Ellipsoid object to extract default GM and R values from, GRS80 values are used if None. Default is None.
+    Returns
+    -------
+    shcs : Shc
+        Spherical harmonic coefficients object with degree and order up to nmax,
+        with coefficients below nmin set to zero if nmin > 0.
+    Raises
+    ------
+    ValueError
+        If nmin is greater than or equal to nmax.
+    Warnings
+    --------
+    UserWarning
+        If GM or R are provided and file containing coefficients also contains them (unnecessary, user-specified values ignored). 
+        If GM or R are not provided file containing coefficients not contains them (defaults used).
+    """
     if shcs_type.lower().strip() in ['gfc','bin','mtx','tbl','dov']: # read from file types recognised by PyHarm
         if (GM is not None) or (R is not None):
             warnings.warn('GM and R values are unnecessary for this file type, they are ignored in this case ...',UserWarning)
@@ -94,7 +129,49 @@ def read_shcs(shcs_data,shcs_type,nmin=0,nmax=None,GM=None,R=None,ellipsoid=None
     return shcs
 
 
-def SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data=None,lat_ell=None,h_ell=None,normal_field_removed = False):
+def SH_synthesis(points : ph.crd.PointGrid|ph.crd.PointSctr,shcs : ph.shc.Shc,points_type : str,quantity : str,nmin : int = 0, nmax : int|None = None,ellipsoid : Ellipsoid|None = None,DTM_shcs_data : ph.shc.Shc|None = None,lat_ell : NDArray|None = None,h_ell : NDArray|None = None,normal_field_removed : bool = False) -> NDArray:
+    """
+    Synthesize gravitational and gravity field quantities from spherical harmonic coefficients.
+    This function computes various gravity field functionals (potential, gravity, gravity gradients,
+    geoid undulation, etc.) at specified points using spherical harmonic synthesis.
+    NOT FOR DIRECT USE
+    Used by:
+        pyharmgrav.point_sh_synthesis
+        pyharmgrav.grid_sh_synthesis
+    Parameters
+    ----------
+    points : ph.crd.PointGrid | ph.crd.PointSctr
+        Evaluation points as either a regular grid or scattered points.
+    points_type : str
+        Type of input coordinates ('spherical'/'sph' or 'ellipsoidal'/'ell').
+    shcs : ph.shc.Shc
+        Spherical harmonic coefficients.
+    quantity : str
+        Type of quantity to compute. Options include:
+        'V', 'topo', 'T', 'W', 'dg', 'dg_dist', 'g', 'g_abs','V_xz', 'V_yz', 'V_xy', 'V_xx', 'V_yy', 'V_zz', 'V_delta',
+        'W_xz', 'W_yz', 'W_xy', 'W_xx', 'W_yy', 'W_zz', 'W_delta', 'T_xz', 'T_yz', 'T_xy', 'T_xx', 'T_yy', 'T_zz', 'T_delta'
+        'N', 'zeta', 'zeta_ell', 'xi', 'eta', 'theta'
+    nmin : int, optional
+        Minimum spherical harmonic degree (default: 0).
+    nmax : int | None, optional
+        Maximum spherical harmonic degree (default: None, uses all available coefficients).
+    ellipsoid : Ellipsoid | None, optional
+        Reference ellipsoid object for coordinate transformations and normal field computation (default: None).
+    DTM_shcs_data : ph.shc.Shc | None, optional
+        Digital Terrain Model as spherical harmonic coefficients, required for geoid undulation (default: None).
+    lat_ell : NDArray | None, optional
+        Ellipsoidal latitude array for height anomaly and deflection computations (default: None).
+    h_ell : NDArray | None, optional
+        Ellipsoidal height array for height anomaly and deflection computations (default: None).
+    normal_field_removed : bool, optional
+        If True, normal field has already been removed from coefficients (default: False).
+    Returns
+    -------
+    NDArray
+        Computed field quantity at specified points. Shape depends on input:
+        - Scalar quantities: 1D array of length equals number of input points
+        - 'g' (gravity vector): shape (n_points, 3) in north-east-down components
+    """
     grid = True if isinstance(points,ph.crd.PointGrid) else False
     if ellipsoid is not None:
         omega = ellipsoid.omega         # Earth's angular velocity in rad/s

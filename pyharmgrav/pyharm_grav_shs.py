@@ -4,9 +4,70 @@ from .pyharm_grav_shs_utils import read_shcs, geod2geoc, SH_synthesis
 from os.path import splitext
 import warnings
 from .normal_grav_field import Ellipsoid
+from numpy.typing import NDArray
 
-### FUNCTION FOR HS SYNTHESIS AT POINT
-def point_sh_synthesis(points,shcs_data,points_type,quantity,nmin=0,nmax=None,ellipsoid=None,GM=None,R=None,DTM_shcs_data=None,normal_field_removed = False):
+### FUNCTION FOR SH SYNTHESIS AT POINT
+def point_sh_synthesis(points : NDArray,shcs_data : str, points_type : str, quantity : str, nmin : int = 0, nmax : int|None = None, ellipsoid : Ellipsoid|None = None, GM : float|None = None, R : float|None = None, DTM_shcs_data : str|None = None, normal_field_removed : bool = False) -> NDArray:
+    """
+    Compute spherical harmonic synthesis at scattered points.
+    This function computes various gravity field functionals (potential, gravity, gravity gradients,
+    geoid undulation, etc.) at specified points using spherical harmonic synthesis.
+    Parameters
+    ----------
+    points : NDArray
+        Input coordinates of points.
+        Shape: (N, 2) for [latitude, longitude] or (N, 3) for [latitude (deg), longitude (deg), height (m)].
+    shcs_data : str
+        File path to spherical harmonic coefficients.
+    points_type : str
+        Coordinate system type of input points.
+        Options: 'spherical'/'sph' or 'ellipsoidal'/'ell'.
+    quantity : str
+        Type of quantity to synthesize.
+        Options: 
+        -------------------------------------------------
+        'topo'          topography [m]
+        'W'             gravity potential [m^2/s^2]
+        'V'             gravitational potential [m^2/s^2]
+        'T'             disturbing ptential [m^2/s^2]
+        'dg'            gravity anomaly [mGal]
+        'dg_dist'       gravity disturbance [mGal]
+        'g'             gravity vector (g_x, g_y, g_z) [m/s^2] in north-east-down local carthesian coordinate-system
+        'g_abs'         gravity (scalar) [m/s^2]
+        'V_xz', 'V_yz', 'V_xy', 'V_xx', 'V_yy', 'V_zz', 'V_delta',
+        'W_xz', 'W_yz', 'W_xy', 'W_xx', 'W_yy', 'W_zz', 'W_delta'
+        'T_xz', 'T_yz', 'T_xy', 'T_xx', 'T_yy', 'T_zz', 'T_delta'
+        'N'             geoid undulation [m]
+        'zeta'          height anomaly [m]
+        'zeta_ell'      pseudo height anomaly [m]
+        'xi'            deflection of vertical - north component [arcsec]
+        'eta'           deflection of vertical - east component [arcsec]
+        'theta'         deflection of vertical (magnitude) [arcsec]
+        -------------------------------------------------
+    nmin : int, optional
+        Minimum degree of spherical harmonic expansion. Default: 0.
+    nmax : int | None, optional
+        Maximum degree of spherical harmonic expansion.
+        If None, automatically determined from file. Default: None.
+    ellipsoid : Ellipsoid | None, optional
+        Reference ellipsoid definition. If None, GRS80 ellipsoid is used. Default: None.
+    GM : float | None, optional
+        Geocentric gravitational constant. Default: None.
+        For 'topo' quantity defaults to 1.
+    R : float | None, optional
+        Reference radius (meters). Default: None.
+        For 'topo' quantity defaults to 1.
+    DTM_shcs_data : str | None, optional
+        File path to topographic spherical harmonic coefficients. Default: None.
+    normal_field_removed : bool, optional
+        If True, normal field has already been removed from coefficients (default: False).
+    Returns
+    -------
+    NDArray
+        Computed field quantity at specified points. Shape depends on input:
+        - Scalar quantities: 1D array of length equals number of input points
+        - 'g' (gravity vector): shape (n_points, 3) in north-east-down components
+    """
     # HANDLE DEFAULT VALUES FOR OPTIONAL PARAMETERS ------------------------------------------------------------------
     if ellipsoid is not None:
         ellipsoid  = Ellipsoid(ellipsoid)
@@ -62,8 +123,77 @@ def point_sh_synthesis(points,shcs_data,points_type,quantity,nmin=0,nmax=None,el
     # synthesis moved to separate function and handle grid setup,  synthesis function is generalized for both scatttered points and grid
     return SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data,lat_ell,h_ell,normal_field_removed)
 
-### FUNCTION FOR HS SYNTHESIS ON GRID
-def grid_sh_synthesis(quantity,min_lat,max_lat,min_lon,max_lon,resolution,shcs_data,resolution_unit='degrees',nmin=0,nmax=None,ellipsoid=None,ref_surface_type='ellipsoid',height=0,GM=None,R=None,DTM_shcs_data=None,normal_field_removed = False):
+### FUNCTION FOR SH SYNTHESIS ON GRID
+def grid_sh_synthesis(quantity : str, min_lat : float, max_lat : float, min_lon : float, max_lon : float, resolution : float|list[float]|tuple[float], shcs_data : str, resolution_unit : str = 'degrees', nmin : int = 0, nmax : int|None = None, ellipsoid : str|list|tuple|dict|None = None,ref_surface_type : str = 'ellipsoid', height : float = 0,GM : float|None = None, R : float|None = None, DTM_shcs_data : str|None =None, normal_field_removed : bool = False):
+    """
+    Compute spherical harmonic synthesis on a regular grid.
+    This function computes various gravity field functionals (potential, gravity, gravity gradients,
+    geoid undulation, etc.) at specified points using spherical harmonic synthesis.
+    Parameters
+    ----------
+    quantity : str
+        Type of quantity to synthesize.
+        Options: 
+        -------------------------------------------------
+        'topo'          topography [m]
+        'W'             gravity potential [m^2/s^2]
+        'V'             gravitational potential [m^2/s^2]
+        'T'             disturbing ptential [m^2/s^2]
+        'dg'            gravity anomaly [mGal]
+        'dg_dist'       gravity disturbance [mGal]
+        'g'             gravity vector (g_x, g_y, g_z) [m/s^2] in north-east-down local carthesian coordinate-system
+        'g_abs'         gravity (scalar) [m/s^2]
+        'V_xz', 'V_yz', 'V_xy', 'V_xx', 'V_yy', 'V_zz', 'V_delta',
+        'W_xz', 'W_yz', 'W_xy', 'W_xx', 'W_yy', 'W_zz', 'W_delta'
+        'T_xz', 'T_yz', 'T_xy', 'T_xx', 'T_yy', 'T_zz', 'T_delta'
+        'N'             geoid undulation [m]
+        'zeta'          height anomaly [m]
+        'zeta_ell'      pseudo height anomaly [m]
+        'xi'            deflection of vertical - north component [arcsec]
+        'eta'           deflection of vertical - east component [arcsec]
+        'theta'         deflection of vertical (magnitude) [arcsec]
+        -------------------------------------------------
+    min_lat : float
+        Minimum latitude of the grid in degrees.
+    max_lat : float
+        Maximum latitude of the grid in degrees.
+    min_lon : float
+        Minimum longitude of the grid in degrees.
+    max_lon : float
+        Maximum longitude of the grid in degrees.
+    resolution : float or tuple or list
+        Grid resolution. If float, applies to both latitude and longitude.
+        If tuple or list of length 2, specifies [lat_resolution, lon_resolution].
+    shcs_data : str
+        Path to the spherical harmonic coefficients file.
+    resolution_unit : str, optional
+        Unit of resolution. Options: 'degrees' (default), 'm'/'min'/'minutes', 's'/'sec'/'seconds'.
+    nmin : int, optional
+        Minimum degree of spherical harmonic expansion (default: 0).
+    nmax : int or None, optional
+        Maximum degree of spherical harmonic expansion. If None, extracted from file (default: None).
+    ellipsoid : str or list or tuple or dict or None, optional
+        Ellipsoid specification for coordinate transformations (default: None).
+    ref_surface_type : str, optional
+        Reference surface type: 'ellipsoid'/'ell' or 'sphere'/'sph' (default: 'ellipsoid').
+    height : float, optional
+        Height above reference surface in meters (default: 0).
+    GM : float | None, optional
+        Geocentric gravitational constant. Default: None.
+        For 'topo' quantity defaults to 1.
+    R : float | None, optional
+        Reference radius (meters). Default: None.
+        For 'topo' quantity defaults to 1.
+    DTM_shcs_data : str | None, optional
+        File path to topographic spherical harmonic coefficients. Default: None.
+    normal_field_removed : bool, optional
+        If True, normal field has already been removed from coefficients (default: False).
+    Returns
+    -------
+        A tuple containing:
+        - Synthesis result from SH_synthesis function
+        - coords : dict with 'latitude' and 'longitude' arrays in degrees
+    """
     # HANDLE DEFAULT VALUES FOR OPTIONAL PARAMETERS ------------------------------------------------------------------
     if ellipsoid is not None:
         ellipsoid  = Ellipsoid(ellipsoid)
@@ -133,10 +263,6 @@ def grid_sh_synthesis(quantity,min_lat,max_lat,min_lon,max_lon,resolution,shcs_d
     , np.radians(longitudes), np.ascontiguousarray(sphere_radii)
 
     if quantity == 'topo':
-        #if R is None:
-        #    shcs.rescale(mu=1,r=1)  # set GM and R to 1 for topography synthesis
-        #else:
-        #    shcs.rescale(mu=1)  # if R scale factor is provided, only set GM to 1
         radius[:] = R # r is also set to 1 in shcs for topography synthesis, so upward continuation term becomes 1
 
     if quantity in ['zeta', 'N', 'zeta_ell'] and (h_ell is not None and h_ell.max() > 1e-6):

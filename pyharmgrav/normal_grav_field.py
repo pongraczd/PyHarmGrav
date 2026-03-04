@@ -1,21 +1,23 @@
 import numpy as np
+from numpy.typing import NDArray
+import pyharm as ph
 
 class Ellipsoid:
-    def __init__(self,param):
+    def __init__(self,param : str|list|tuple|dict):
         if isinstance(param , str):
             self.name = param.lower().strip()
         else:
             self.name = 'custom'
         if self.name == 'wgs84':
             self.GM = 3986004.418e8                 # Geocentric gravitational constant of WGS84
-            self.a = 6378137                        # Semimajor axis of WGS84
+            self.a = 6378137.0                      # Semimajor axis of WGS84
             self.f = 1/298.257223563                # Flattening of WGS84
             self.C_20 =  -0.484166774985e-3         #Fully normalized C_20 of WGS84
             self.omega = 7.292115e-05               # Angular velocity of Earth
             self.e=np.sqrt((self.f)*(2-(self.f)))   # First eccentricity
         elif self.name == 'grs80':
-            self.GM=3986005e8                       # Geocentric gravitational constant of GRS80
-            self.a=6378137                          # Semimajor axis of GRS80
+            self.GM = 3986005e8                     # Geocentric gravitational constant of GRS80
+            self.a = 6378137.0                      # Semimajor axis of GRS80
             self.f = 1/298.257222101                # Flattening of GRS80
             self.C_20=-108263e-8/np.sqrt(5)         # Fully normalized C_20 of GRS80
             self.omega = 7.292115e-05               # Angular velocity of Earth
@@ -50,7 +52,7 @@ class Ellipsoid:
     def __repr__(self):
         return f"Ellipsoid(name='{self.name}', GM={self.GM}, a ={self.a}, e ={self.e}, C_20 ={self.C_20}, omega ={self.omega}, f = {self.f}, m ={self.m}, gamma_e={self.gamma_e} , k={self.k})\n"
     
-    def normalklm(self,GM,R):
+    def normalklm(self,GM : float,R : float) -> tuple[NDArray,NDArray]:
         """
         Normal gravity field until degree 20 (even degrees computed - odd degrees are zero)
         based on level ellipsoid - GRS80 or WGS84
@@ -69,7 +71,7 @@ class Ellipsoid:
         l = np.arange(0, 21, 2)
         return CEl,l
     
-    def subtract_normal_field(self,shcs,nmin=0):
+    def subtract_normal_field(self,shcs : ph.shc.Shc, nmin : int = 0):
         """
         Subtract normal gravity field coefficients from the spherical harmonic coefficients.
         The normal gravity field coefficients are computed up to degree 20.
