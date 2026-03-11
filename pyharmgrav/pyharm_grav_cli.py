@@ -15,8 +15,7 @@ def load_config(config_file):
 
 def calc_grid(config):
     print('Grid synthesis')
-    config_file = config.config
-    params = load_config(config_file)
+    params = load_config(config)
     outfile = params['output_file']
     params.pop('output_file')
     result ,coords = grid_sh_synthesis(**params)
@@ -40,15 +39,17 @@ def calc_grid(config):
     else:
         raise ValueError('Not recognised output file type')
 
-def calc_point(config):
-    point_numbers = False
+def calc_point(config,file):
     print('Point synthesis')
-    config_file = config.config
-    params = load_config(config_file)
-    input_file = params['input_file']
-    output_file = params['output_file']
-    params.pop('input_file')
-    params.pop('output_file')
+    if file :
+        point_numbers = True
+        params = load_config(config)
+        input_file = params['input_file']
+        output_file = params['output_file']
+        params.pop('input_file')
+        params.pop('output_file')
+    else:
+        params = config
     if 'point_numbers' in params.keys():
         point_numbers = params['point_numbers']
         params.pop('point_numbers')
@@ -59,6 +60,7 @@ def calc_point(config):
         point_coords = data_in_file
     params['points'] = point_coords
     if isinstance(params['quantity'], list):
+        assert len(list(set(quantity))) == len(quantity), "Duplicates in quantities"
         result = []
         for quantity in params['quantity']:
             params_local = params.copy()
@@ -68,6 +70,8 @@ def calc_point(config):
             result.append(result_temp)
         result = np.hstack(result)
         quantity_num = len(params['quantity'])
+        if 'g' in params['quantity']:
+            quantity_num +=2
         if point_numbers:
             out_format = '%d %.8f %.8f %.3f ' + quantity_num * '%.12e '
         else:
@@ -80,7 +84,6 @@ def calc_point(config):
         if point_numbers:
             if params['quantity'] == 'g':
                 out_format = '%d %.8f %.8f %.3f %.12e %.12e %.12e'
-            #elif quantity == ''
             else:
                 out_format = '%d %.8f %.8f %.3f %.12e'
         else:
@@ -94,15 +97,60 @@ def main():
     parser = argparse.ArgumentParser(description="PyHarmGrav")
     subparsers = parser.add_subparsers(dest='command', required=True)
 
-    parser_grid = subparsers.add_parser('grid',help='Compute on grid')
-    parser_grid.add_argument('config', help='Path to config file')
+    parser_grid = subparsers.add_parser('grid',nargs='?',help='Compute on grid')
+    # config file
+    parser_grid.add_argument('config',nargs='?', help='Path to config file')
+    # options if no config file is used
+    parser_grid.add_argument('--quantity',type=str,nargs='+')
+    parser_grid.add_argument('--min_lat',type=float)
+    parser_grid.add_argument('--max_lat',type=float)
+    parser_grid.add_argument('--min_lon',type=float)
+    parser_grid.add_argument('--max_lon',type=float)
+    parser_grid.add_argument('--min_lat',type=float)
+    parser_grid.add_argument('--resolution',type=float)
+    parser_grid.add_argument('--shcs_data',type=str)
+    parser_grid.add_argument('--resolution_unit',type=str,default='degrees')
+    parser_grid.add_argument('--nmin',type=int,default=0)
+    parser_grid.add_argument('--nmax',type=int)
+    parser_grid.add_argument('--ellipsoid',type=str,default='GRS80')
+    parser_grid.add_argument('--ref_surface_type',type=str,default='ellipsoid')
+    parser_grid.add_argument('--height',type=float,default=0.0)
+    parser_grid.add_argument('--GM',type=float)
+    parser_grid.add_argument('--R',type=float)
+    parser_grid.add_argument('--DTM_shcs_data',type=str)
+    parser_grid.add_argument('--output_file',type=str)
+
     parser_grid.set_defaults(func=calc_grid)
 
-    parser_point = subparsers.add_parser('point',help='Compute on grid')
+    parser_point = subparsers.add_parser('point',help='Compute at scattered points')
+    # config file
     parser_point.add_argument('config', help='Path to config file')
+    # options if no config file is used
+    parser_point.add_argument('--input_file',type=str)
+    parser_point.add_argument('--shcs_data',type=str)
+    parser_point.add_argument('--quantity',type=str,nargs='+')
+    parser_point.add_argument('--nmin',type=int,default=0)
+    parser_point.add_argument('--nmax',type=str)
+    parser_point.add_argument('--ellipsoid',type=str,default='GRS80')
+    parser_point.add_argument('--GM',type=float)
+    parser.add_argument('--R',type=float)
+    parser.add_argument('--DTM_shcs_data',type=str)
+    parser.add_argument('--point_numbers',type=bool,default=True)
+    parser.add_argument('--output_file',type=str)
+    parser.add_argument('--normal_field_removed',default=False)
+
     parser_point.set_defaults(func=calc_point)
     args = parser.parse_args()
-    args.func(args)
+    print(args)
+    args_config = args.config
+    if args_config:
+        args.func(args_config,True)
+    else:
+        args_dict = vars(args)
+        args_dict.pop("config")
+        args_dict.pop("command")
+        args_dict.pop("func")
+        args.func(args_dict,False)
     
 if __name__ == '__main__':
     main()

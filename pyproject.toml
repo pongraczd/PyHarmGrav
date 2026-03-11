@@ -11,3 +11,5 @@ version = "0.1"
 dependencies = ["numpy","pyharm","xarray","rioxarray","scipy","h5py","PyQt5","netCDF4"]
 [project.scripts]
 pyharmgrav = "pyharmgrav.pyharm_grav_cli:main"
+[project.gui-scripts]
+pyharmgrav_gui = "pyharmgrav.pyharmgrav_GUI:main"

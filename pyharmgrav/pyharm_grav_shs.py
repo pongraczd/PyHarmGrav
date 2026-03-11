@@ -34,9 +34,9 @@ def point_sh_synthesis(points : NDArray,shcs_data : str, points_type : str, quan
         'dg_dist'       gravity disturbance [mGal]
         'g'             gravity vector (g_x, g_y, g_z) [m/s^2] in north-east-down local carthesian coordinate-system
         'g_abs'         gravity (scalar) [m/s^2]
-        'V_xz', 'V_yz', 'V_xy', 'V_xx', 'V_yy', 'V_zz', 'V_delta',
-        'W_xz', 'W_yz', 'W_xy', 'W_xx', 'W_yy', 'W_zz', 'W_delta'
-        'T_xz', 'T_yz', 'T_xy', 'T_xx', 'T_yy', 'T_zz', 'T_delta'
+        'V_xz', 'V_yz', 'V_xy', 'V_xx', 'V_yy', 'V_zz', 'V_delta'       gravitational gradients
+        'W_xz', 'W_yz', 'W_xy', 'W_xx', 'W_yy', 'W_zz', 'W_delta'       gravity gradients
+        'T_xz', 'T_yz', 'T_xy', 'T_xx', 'T_yy', 'T_zz', 'T_delta'       gravity anomaly gradients
         'N'             geoid undulation [m]
         'zeta'          height anomaly [m]
         'zeta_ell'      pseudo height anomaly [m]
@@ -143,9 +143,9 @@ def grid_sh_synthesis(quantity : str, min_lat : float, max_lat : float, min_lon 
         'dg_dist'       gravity disturbance [mGal]
         'g'             gravity vector (g_x, g_y, g_z) [m/s^2] in north-east-down local carthesian coordinate-system
         'g_abs'         gravity (scalar) [m/s^2]
-        'V_xz', 'V_yz', 'V_xy', 'V_xx', 'V_yy', 'V_zz', 'V_delta',
-        'W_xz', 'W_yz', 'W_xy', 'W_xx', 'W_yy', 'W_zz', 'W_delta'
-        'T_xz', 'T_yz', 'T_xy', 'T_xx', 'T_yy', 'T_zz', 'T_delta'
+        'V_xz', 'V_yz', 'V_xy', 'V_xx', 'V_yy', 'V_zz', 'V_delta'       gravitational gradients
+        'W_xz', 'W_yz', 'W_xy', 'W_xx', 'W_yy', 'W_zz', 'W_delta'       gravity gradients
+        'T_xz', 'T_yz', 'T_xy', 'T_xx', 'T_yy', 'T_zz', 'T_delta'       gravity anomaly gradients
         'N'             geoid undulation [m]
         'zeta'          height anomaly [m]
         'zeta_ell'      pseudo height anomaly [m]
