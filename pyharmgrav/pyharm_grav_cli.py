@@ -2,6 +2,7 @@ import numpy as np
 from .pyharm_grav_shs import point_sh_synthesis, grid_sh_synthesis
 import argparse
 import sys
+import copy
 
 def load_config(config_file):
     params = {}
@@ -44,12 +45,15 @@ def calc_point(config,file):
     if file :
         point_numbers = True
         params = load_config(config)
-        input_file = params['input_file']
-        output_file = params['output_file']
-        params.pop('input_file')
-        params.pop('output_file')
+        
     else:
         params = config
+
+    input_file = params['input_file']
+    output_file = params['output_file']
+    params.pop('input_file')
+    params.pop('output_file')
+    
     if 'point_numbers' in params.keys():
         point_numbers = params['point_numbers']
         params.pop('point_numbers')
@@ -60,7 +64,7 @@ def calc_point(config,file):
         point_coords = data_in_file
     params['points'] = point_coords
     if isinstance(params['quantity'], list):
-        assert len(list(set(quantity))) == len(quantity), "Duplicates in quantities"
+        assert len(list(set(params['quantity']))) == len(params['quantity']), "Duplicates in quantities"
         result = []
         for quantity in params['quantity']:
             params_local = params.copy()
@@ -88,6 +92,9 @@ def calc_point(config,file):
                 out_format = '%d %.8f %.8f %.3f %.12e'
         else:
             out_format = '%.8f %.8f %.3f %.12e'
+    if point_coords.shape[1] == 2:
+        height = np.zeros((data_in_file.shape[0],1))
+        data_in_file = np.hstack((data_in_file, height))
     output_array = np.hstack((data_in_file, result))
     np.savetxt(output_file,output_array,fmt=out_format)
 
@@ -97,7 +104,7 @@ def main():
     parser = argparse.ArgumentParser(description="PyHarmGrav")
     subparsers = parser.add_subparsers(dest='command', required=True)
 
-    parser_grid = subparsers.add_parser('grid',nargs='?',help='Compute on grid')
+    parser_grid = subparsers.add_parser('grid',help='Compute on grid')
     # config file
     parser_grid.add_argument('config',nargs='?', help='Path to config file')
     # options if no config file is used
@@ -106,7 +113,6 @@ def main():
     parser_grid.add_argument('--max_lat',type=float)
     parser_grid.add_argument('--min_lon',type=float)
     parser_grid.add_argument('--max_lon',type=float)
-    parser_grid.add_argument('--min_lat',type=float)
     parser_grid.add_argument('--resolution',type=float)
     parser_grid.add_argument('--shcs_data',type=str)
     parser_grid.add_argument('--resolution_unit',type=str,default='degrees')
@@ -124,32 +130,35 @@ def main():
 
     parser_point = subparsers.add_parser('point',help='Compute at scattered points')
     # config file
-    parser_point.add_argument('config', help='Path to config file')
+    parser_point.add_argument('config',nargs='?', help='Path to config file')
     # options if no config file is used
     parser_point.add_argument('--input_file',type=str)
+    parser_point.add_argument('--points_type',type=str)
     parser_point.add_argument('--shcs_data',type=str)
     parser_point.add_argument('--quantity',type=str,nargs='+')
     parser_point.add_argument('--nmin',type=int,default=0)
     parser_point.add_argument('--nmax',type=str)
     parser_point.add_argument('--ellipsoid',type=str,default='GRS80')
     parser_point.add_argument('--GM',type=float)
-    parser.add_argument('--R',type=float)
-    parser.add_argument('--DTM_shcs_data',type=str)
-    parser.add_argument('--point_numbers',type=bool,default=True)
-    parser.add_argument('--output_file',type=str)
-    parser.add_argument('--normal_field_removed',default=False)
+    parser_point.add_argument('--R',type=float)
+    parser_point.add_argument('--DTM_shcs_data',type=str)
+    parser_point.add_argument('--point_numbers',type=bool,default=True)
+    parser_point.add_argument('--output_file',type=str)
+    parser_point.add_argument('--normal_field_removed',default=False)
 
     parser_point.set_defaults(func=calc_point)
     args = parser.parse_args()
     print(args)
+    print(args.func)
     args_config = args.config
     if args_config:
         args.func(args_config,True)
     else:
-        args_dict = vars(args)
+        args_dict = copy.deepcopy(vars(args))
         args_dict.pop("config")
         args_dict.pop("command")
         args_dict.pop("func")
+        print(args)
         args.func(args_dict,False)
     
 if __name__ == '__main__':
