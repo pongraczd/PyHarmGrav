@@ -6,4 +6,6 @@ tesseroid_test/
 input_data/EIGEN-6C4.gfc
 .ipynb_checkpoints/
 pyharmgrav/.ipynb_checkpoints/
+precise_height_anomaly.ipynb
+topo_layers_potential.ipynb
 .vscode
