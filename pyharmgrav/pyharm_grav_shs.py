@@ -120,6 +120,7 @@ def point_sh_synthesis(points : NDArray,shcs_data : str, points_type : str, quan
 
     geoid_corr = None
     if tide_system_conversion is not None:
+        print(f" Tide system conversion applied: {tide_system_conversion}")
         geoid_corr = tide_system_convert(shcs ,shcs_data, quantity ,tide_system_conversion ,lat_ell , k = 0.3)
 
     ## DTM heights if needed -------------------------------------------------------------------------------------------
