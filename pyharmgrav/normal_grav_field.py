@@ -71,7 +71,7 @@ class Ellipsoid:
         l = np.arange(0, 21, 2)
         return CEl,l
     
-    def subtract_normal_field(self,shcs : ph.shc.Shc, nmin : int = 0):
+    def subtract_normal_field(self,shcs : ph.shc.Shc, nmin : int = 0, inplace : bool = False) -> ph.shc.Shc|None:
         """
         Subtract normal gravity field coefficients from the spherical harmonic coefficients.
         The normal gravity field coefficients are computed up to degree 20.
@@ -82,6 +82,8 @@ class Ellipsoid:
         nmin : int                  Minimum number of expansion
         """
         # compute SH coefficients normal gravity field
+        if not inplace:
+            shcs = ph.shc.Shc.from_copy(shcs)
         CEl,l = self.normalklm( shcs.mu, shcs.r)
         # handle case where normal field coefficients are computed over nmax
         CEl = CEl[l<=shcs.nmax]
@@ -98,4 +100,29 @@ class Ellipsoid:
         if len(l) == 0:
             return
         shcs.set_coeffs(n=l, m=np.zeros(l.shape,dtype=int), c=low_c_coeffs)
+        return shcs if not inplace else None
+
+    def normal_potential_sph(self,points : ph.crd.PointSctr|ph.crd.PointGrid, GM : float,R : float) -> NDArray:
+        CEl,l= self.normalklm(GM,R)
+        normal_shcs = ph.shc.Shc.from_zeros(nmax=20,mu=GM,r=R)
+        normal_shcs.set_coeffs(n=l, m=np.zeros(l.shape,dtype=int), c=CEl)
+        omega = self.omega
+        points_r = points.r
+        points_lat = points.lat
+        centrifugal_pot = 0.5 * omega**2 * (points_r**2) * np.cos(points_lat)**2
+        return ph.shs.point(points,normal_shcs,l.max()) + centrifugal_pot
+
+    def gamma0(self,lat_ell: float|NDArray) -> float|NDArray:
+        esq = (self.e)**2
+        k = self.k
+        return self.gamma_e*(1+k*(np.sin(np.radians(lat_ell)))**2)/np.sqrt(1-esq*(np.sin(np.radians(lat_ell)))**2)
+
+    def gamma_h(self,lat_ell: float|NDArray, h_ell: float|NDArray) -> float|NDArray:
+        gamma0 = self.gamma0(lat_ell)
+        a = self.a
+        fEl = self.f
+        m = self.m
+        fac = 1-2/a*(1+fEl+m-2*fEl*(np.sin(np.radians(lat_ell)))**2)*h_ell+3*h_ell**2/(a**2)
+        return gamma0*fac
+    
     

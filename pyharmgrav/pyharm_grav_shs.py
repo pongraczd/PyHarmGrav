@@ -1,13 +1,14 @@
 import pyharm as ph
 import numpy as np
-from .pyharm_grav_shs_utils import read_shcs, geod2geoc, SH_synthesis
+from .pyharm_grav_shs_utils import read_shcs, geod2geoc, SH_synthesis, tide_system_convert
 from os.path import splitext
 import warnings
 from .normal_grav_field import Ellipsoid
+from .pyharm_grav_shs_utils import interpolate_from_raster
 from numpy.typing import NDArray
 
 ### FUNCTION FOR SH SYNTHESIS AT POINT
-def point_sh_synthesis(points : NDArray,shcs_data : str, points_type : str, quantity : str, nmin : int = 0, nmax : int|None = None, ellipsoid : Ellipsoid|None = None, GM : float|None = None, R : float|None = None, DTM_shcs_data : str|None = None, normal_field_removed : bool = False) -> NDArray:
+def point_sh_synthesis(points : NDArray,shcs_data : str, points_type : str, quantity : str, nmin : int = 0, nmax : int|None = None, ellipsoid : str|list|tuple|dict|None = None, GM : float|None = None, R : float|None = None, DTM_shcs_data : str|None = None, DTM_raster : str|None = None, tide_system_conversion : list|tuple|None = None, normal_field_removed : bool = False) -> NDArray:
     """
     Compute spherical harmonic synthesis at scattered points.
     This function computes various gravity field functionals (potential, gravity, gravity gradients,
@@ -59,6 +60,11 @@ def point_sh_synthesis(points : NDArray,shcs_data : str, points_type : str, quan
         For 'topo' quantity defaults to 1.
     DTM_shcs_data : str | None, optional
         File path to topographic spherical harmonic coefficients. Default: None.
+    DTM_raster : str | None, optional
+        File path to digital terrain model raster. Default: None.
+    tide_system_conversion : list or tuple | None, optional
+        Two-element sequence [source_system, target_system] specifying the conversion direction.
+        Valid values: 'tide-free', 'zero-tide', 'mean-tide', or None to auto-detect source. Default: None.
     normal_field_removed : bool, optional
         If True, normal field has already been removed from coefficients (default: False).
     Returns
@@ -71,6 +77,7 @@ def point_sh_synthesis(points : NDArray,shcs_data : str, points_type : str, quan
     # HANDLE DEFAULT VALUES FOR OPTIONAL PARAMETERS ------------------------------------------------------------------
     if ellipsoid is not None:
         ellipsoid  = Ellipsoid(ellipsoid)
+
     # get shcs_type from file extension if not provided
     #if shcs_type is None:
     shcs_type = splitext(shcs_data)[1][1:]  # remove the dot
@@ -86,6 +93,7 @@ def point_sh_synthesis(points : NDArray,shcs_data : str, points_type : str, quan
 
     shcs = read_shcs(shcs_data,shcs_type,nmin,nmax,GM,R,ellipsoid)
 
+    
     if nmax is None:
         nmax = shcs.nmax
 
@@ -95,20 +103,33 @@ def point_sh_synthesis(points : NDArray,shcs_data : str, points_type : str, quan
         lat_ell = None
         h_ell = None
     elif points_type in ['ellipsoidal','ell']:
-        if quantity in ['N','zeta']:
-            max_h = 0 if points.shape[1]==2 else (points[:,2]).max()
-            if max_h > 1e-6:
-                if quantity == 'N':
-                    raise ValueError("Reference surface to which geoid undulation is expressed is conventionally the surface \
+        if quantity == 'N':
+            raise ValueError("Reference surface to which geoid undulation is expressed is conventionally the surface \
                     of the reference ellipsoid. If you wish to compute these functionals, please set values of Ellipsoidal height to zero.")
-                else:
-                    warnings.warn('Heights are non-zero for computing height anomaly, they are used instead of DEM. If you want to use DEM rather, \
-                            set them to zero or not specify heights at all.',UserWarning)
+        elif quantity == 'zeta':
+            raise ValueError("Ellipsoidal must be zero for functional 'zeta' (height anomaly). If you wish to compute height anomaly with ellipsoidal heights, please use 'zeta_ell' functional (generalised height anomaly).")
         lat_ell = (points[:,0]).copy()
         h_ell = np.zeros(points.shape[0]) if points.shape[1]==2 else (points[:,2]).copy()
         points = geod2geoc(points,ellipsoid)
     else:
         raise ValueError("Coordinate type not recognised")
+    
+    if (points_type in ['spherical','sph']) and (quantity in ['N','zeta']):
+            raise ValueError('Ellipsoidal coordinates must be given!')
+    ## TIDE SYSTEM CONVERSION ------------------------------------------------------------------------------------------
+
+    geoid_corr = None
+    if tide_system_conversion is not None:
+        geoid_corr = tide_system_convert(shcs ,shcs_data, quantity ,tide_system_conversion ,lat_ell , k = 0.3)
+
+    ## DTM heights if needed -------------------------------------------------------------------------------------------
+    if DTM_raster is not None and DTM_shcs_data is not None:
+        raise ValueError("Both DTM_shcs_data and DTM_raster are provided. Please provide only one of these to get height information for topography synthesis.")
+    ## get height from DTM raster if DTM_shcs_data not provided but DTM_raster provided
+    if DTM_raster is not None:
+        topo_heights = interpolate_from_raster(DTM_raster, points[:,1], points[:,0]) # note the order of arguments for interpolation is (lon, lat)
+    else:
+        topo_heights = None
     
     # ensure that C-contagious arrays are passed to pyharm
     latitude, longitude, radius = np.radians(np.ascontiguousarray(points[:,0])) \
@@ -121,10 +142,13 @@ def point_sh_synthesis(points : NDArray,shcs_data : str, points_type : str, quan
 
     # SYNTHESIS OF DIFFERENT QUANTITIES -------------------------------------------------------------------------------
     # synthesis moved to separate function and handle grid setup,  synthesis function is generalized for both scatttered points and grid
-    return SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data,lat_ell,h_ell,normal_field_removed)
+    result = SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data,topo_heights,lat_ell,h_ell,normal_field_removed)
+    if geoid_corr is not None:
+        result += geoid_corr    
+    return result
 
 ### FUNCTION FOR SH SYNTHESIS ON GRID
-def grid_sh_synthesis(quantity : str, min_lat : float, max_lat : float, min_lon : float, max_lon : float, resolution : float|list[float]|tuple[float], shcs_data : str, resolution_unit : str = 'degrees', nmin : int = 0, nmax : int|None = None, ellipsoid : str|list|tuple|dict|None = None,ref_surface_type : str = 'ellipsoid', height : float = 0,GM : float|None = None, R : float|None = None, DTM_shcs_data : str|None =None, normal_field_removed : bool = False):
+def grid_sh_synthesis(quantity : str, min_lat : float, max_lat : float, min_lon : float, max_lon : float, resolution : float|list[float]|tuple[float], shcs_data : str, resolution_unit : str = 'degrees', nmin : int = 0, nmax : int|None = None, ellipsoid : str|list|tuple|dict|None = None,ref_surface_type : str = 'ellipsoid', height : float = 0,GM : float|None = None, R : float|None = None, DTM_shcs_data : str|None =None, DTM_raster : str|None = None, tide_system_conversion : list|tuple|None = None, normal_field_removed : bool = False):
     """
     Compute spherical harmonic synthesis on a regular grid.
     This function computes various gravity field functionals (potential, gravity, gravity gradients,
@@ -186,6 +210,11 @@ def grid_sh_synthesis(quantity : str, min_lat : float, max_lat : float, min_lon 
         For 'topo' quantity defaults to 1.
     DTM_shcs_data : str | None, optional
         File path to topographic spherical harmonic coefficients. Default: None.
+    DTM_raster : str | None, optional
+        File path to digital terrain model raster. Default: None.
+    tide_system_conversion : list or tuple | None, optional
+        Two-element sequence [source_system, target_system] specifying the conversion direction.
+        Valid values: 'tide-free', 'zero-tide', 'mean-tide', or None to auto-detect source. Default: None.
     normal_field_removed : bool, optional
         If True, normal field has already been removed from coefficients (default: False).
     Returns
@@ -240,6 +269,21 @@ def grid_sh_synthesis(quantity : str, min_lat : float, max_lat : float, min_lon 
 
     print(f"Grid size: {len(latitudes)} x {len(longitudes)} = {len(latitudes)*len(longitudes)} points")
 
+
+    ## get points 
+    points_lon = np.repeat(np.expand_dims(longitudes,0),len(points.lat),axis=0)
+    points_lat = np.repeat((latitudes).reshape(-1,1),len(points.lon),axis=1)
+
+
+    if DTM_raster is not None and DTM_shcs_data is not None:
+        raise ValueError("Both DTM_shcs_data and DTM_raster are provided. Please provide only one of these to get height information for topography synthesis.")
+    ## get height from DTM raster if DTM_shcs_data not provided but DTM_raster provided
+    if DTM_raster is not None:
+        topo_heights = interpolate_from_raster(DTM_raster, points_lon.ravel(), points_lat.ravel()) # note the order of arguments for interpolation is (lon, lat)
+        topo_heights = topo_heights.reshape(points_lon.shape)
+    else:
+        topo_heights = None
+
     if ref_surface_type in ['ellipsoid','ell']:
         lat_ell = latitudes.copy()
         h_ell = heights.copy()
@@ -266,12 +310,19 @@ def grid_sh_synthesis(quantity : str, min_lat : float, max_lat : float, min_lon 
         radius[:] = R # r is also set to 1 in shcs for topography synthesis, so upward continuation term becomes 1
 
     if quantity in ['zeta', 'N', 'zeta_ell'] and (h_ell is not None and h_ell.max() > 1e-6):
-        warnings.warn('height must be set to zero for computing geoid / height anomaly on a grid. Setting height to 0 ...', UserWarning)
-        h_ell = np.zeros(h_ell.shape,dtype=np.float64)
+        raise ValueError("Height must be set to zero if computing geoid undulation or height anomaly on a grid.")
+    
+    geoid_corr = None
+    if tide_system_conversion is not None:
+        lat_ell_grid = np.repeat(lat_ell.reshape(-1,1),len(points.lon),axis=1)
+        geoid_corr = tide_system_conversion(shcs ,shcs_data, quantity ,tide_system_conversion ,lat_ell_grid , k = 0.3)
 
     points = ph.crd.PointGrid.from_arrays(latitudes.astype(np.float64), longitudes.astype(np.float64), radius.astype(np.float64))
     if ref_surface_type in ['ellipsoid','ell']:
         coords = {'latitude': lat_ell, 'longitude': np.degrees(longitudes)}
     else:
         coords = {'latitude': np.degrees(latitudes), 'longitude': np.degrees(longitudes)}
-    return SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data,lat_ell,h_ell,normal_field_removed),  coords
+    result = SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data,topo_heights,lat_ell,h_ell,normal_field_removed)
+    if geoid_corr is not None:
+        result += geoid_corr    
+    return result,  coords

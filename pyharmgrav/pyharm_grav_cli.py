@@ -91,7 +91,10 @@ def calc_point(config,file):
             else:
                 out_format = '%d %.8f %.8f %.3f %.12e'
         else:
-            out_format = '%.8f %.8f %.3f %.12e'
+            if params['quantity'] == 'g':
+                out_format = '%.8f %.8f %.3f %.12e %.12e %.12e'
+            else:
+                out_format = '%.8f %.8f %.3f %.12e'
     if point_coords.shape[1] == 2:
         height = np.zeros((data_in_file.shape[0],1))
         data_in_file = np.hstack((data_in_file, height))
@@ -124,7 +127,10 @@ def main():
     parser_grid.add_argument('--GM',type=float)
     parser_grid.add_argument('--R',type=float)
     parser_grid.add_argument('--DTM_shcs_data',type=str)
+    parser_grid.add_argument('--DTM_raster',type=str)
+    parser_grid.add_argument('--tide_system_conversion',type=str,nargs=2)
     parser_grid.add_argument('--output_file',type=str)
+    parser_grid.add_argument('--normal_field_removed',default=False)
 
     parser_grid.set_defaults(func=calc_grid)
 
@@ -137,12 +143,15 @@ def main():
     parser_point.add_argument('--shcs_data',type=str)
     parser_point.add_argument('--quantity',type=str,nargs='+')
     parser_point.add_argument('--nmin',type=int,default=0)
-    parser_point.add_argument('--nmax',type=str)
+    parser_point.add_argument('--nmax',type=int)
     parser_point.add_argument('--ellipsoid',type=str,default='GRS80')
     parser_point.add_argument('--GM',type=float)
     parser_point.add_argument('--R',type=float)
     parser_point.add_argument('--DTM_shcs_data',type=str)
-    parser_point.add_argument('--point_numbers',type=bool,default=True)
+    parser_point.add_argument('--DTM_raster',type=str)
+    parser_point.add_argument('--point_numbers', action='store_true', default=True)
+    parser_point.add_argument('--no_point_numbers', action='store_false', dest='point_numbers')
+    parser_point.add_argument('--tide_system_conversion',type=str,nargs=2)
     parser_point.add_argument('--output_file',type=str)
     parser_point.add_argument('--normal_field_removed',default=False)
 
