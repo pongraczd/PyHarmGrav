@@ -2,12 +2,25 @@ import pyharm as ph
 from .normal_grav_field import Ellipsoid
 import numpy as np
 from .read_SH_coeffs import read_bhsc, read_dat, read_mat
-from os.path import splitext
+from os.path import splitext, join
 import warnings
 from numpy.typing import NDArray
 import rasterio as rio
 from scipy.interpolate import interpn
 import re
+from pathlib import Path
+
+def love_n(n : int|NDArray) -> float|NDArray:
+    MODULE_DIR = Path(__file__).resolve().parent
+    DATA_FILE = join(MODULE_DIR,"PREM-LLNs.dat")
+    data=np.loadtxt(DATA_FILE,skiprows=1)
+    l=data[:,0]
+    kl = data[:,3]
+    l = np.insert(l,0,0)
+    kl = np.insert(kl,0,0)
+    #l  = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 30, 40, 50, 70, 100, 150, 200])
+    #kl = np.array([0, 270, -3030, -1940, -1320, -1040, -890, -810, -760, -720, -690, -640, -580, -510, -400, -330, -270, -200, -140, -100, -70])/1e4
+    return np.interp(n,l,kl)
 
 def geod2geoc(lla: NDArray[np.float64], ellipsoid: Ellipsoid) -> NDArray[np.float64]:
     """Convert geodetic coordinates to geocentric.
@@ -91,7 +104,7 @@ def read_shcs(shcs_data : str ,shcs_type : str ,nmin : int = 0,nmax : int|None =
     if shcs_type.lower().strip() in ['gfc','bin','mtx','tbl','dov']: # read from file types recognised by PyHarm
         if (GM is not None) or (R is not None):
             warnings.warn('GM and R values are unnecessary for this file type, they are ignored in this case ...',UserWarning)
-        shcs = ph.shc.Shc.from_file('gfc', shcs_data, nmax)
+        shcs = ph.shc.Shc.from_file(shcs_type, shcs_data, nmax)
     elif shcs_type.lower().strip() == 'bshc': # read from bshc file (binary format used by Curtin University)
         if ((GM is None) or (R is None)): # need GM and R for gravity field synthesis, get default values if not provided
             warnings.warn("GM and R not provided, using default values",UserWarning)
@@ -595,3 +608,30 @@ def SH_synthesis(points : ph.crd.PointGrid|ph.crd.PointSctr,shcs : ph.shc.Shc,po
             eta = -1/gamma_h * ph.shs.point_guru(pnt=points,shcs=shcs,nmax=nmax,dr=0,dlat=0,dlon=1)
             theta = np.sqrt(xi**2+eta**2)
             return theta * rad2sec
+    
+    elif quantity in ['tws','smd']:
+        if normal_field_removed == False:
+            ellipsoid.subtract_normal_field(shcs,nmin,inplace=True)
+        # extract coefficients and indexes
+        index = np.arange(0,nmax+1,1)
+        n_index, m_index = np.meshgrid(index, index,indexing='ij')
+        n_index[n_index < m_index] = -1
+        
+        n_index = n_index.flatten(order='F')
+        n_index = n_index[n_index >= 0]
+
+        c_coeffs = shcs.c
+        s_coeffs = shcs.s
+        # multiply coefficients by (n-1) factor
+        c_coeffs = c_coeffs * (2*n_index + 1)/(1+ love_n(n_index))
+        s_coeffs = s_coeffs * (2*n_index + 1)/(1+ love_n(n_index))
+        R = shcs.r
+        shcs = None
+        shcs = ph.shc.Shc.from_arrays(nmax,c_coeffs,s_coeffs,1.0,1.0)
+        rho_ave = 5517
+        smd = R*rho_ave/3 * ph.shs.point(points,shcs,nmax)
+        if quantity == 'smd':
+            return smd
+        else:
+            return smd / 1000
+

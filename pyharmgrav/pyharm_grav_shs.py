@@ -86,12 +86,15 @@ def point_sh_synthesis(points : NDArray,shcs_data : str, points_type : str, quan
     # get nmax from file if not provided and parser requires it    
     if (nmax is None) and (shcs_type in ['gfc','bin','mtx','tbl','dov']): # file types recignosed by PyHarm
         nmax = ph.shc.Shc.nmax_from_file(shcs_type,shcs_data)
-    if quantity == 'topo':
-        GM = GM if (GM is not None) else 1
-        R = R if (R is not None) else 1
+    if quantity =='topo':
+        GM =  1.0
+        R =  1.0
     # READ SH COEFFICIENTS FROM FILE------------------------------------------------------------------------------------
 
-    shcs = read_shcs(shcs_data,shcs_type,nmin,nmax,GM,R,ellipsoid)
+    if shcs_type.lower().strip() in ['gfc','bin','mtx','tbl','dov']:
+        shcs = read_shcs(shcs_data,shcs_type,nmin,nmax,None,None,ellipsoid)
+    else:
+        shcs = read_shcs(shcs_data,shcs_type,nmin,nmax,GM,R,ellipsoid)
 
     
     if nmax is None:
@@ -136,8 +139,8 @@ def point_sh_synthesis(points : NDArray,shcs_data : str, points_type : str, quan
     latitude, longitude, radius = np.radians(np.ascontiguousarray(points[:,0])) \
     , np.radians(np.ascontiguousarray(points[:,1])), np.ascontiguousarray(points[:,2])
 
-    if quantity == 'topo':
-        radius[:] = R # r is also set to 1 in shcs for topography synthesis, so upward continuation term becomes 1
+    if quantity in ['topo','tws','smd']:
+        radius[:] = 1.0 # r is also set to 1 in shcs for topography synthesis, so upward continuation term becomes 1
 
     points = ph.crd.PointSctr.from_arrays(latitude.astype(np.float64), longitude.astype(np.float64), radius.astype(np.float64))
 
@@ -236,12 +239,14 @@ def grid_sh_synthesis(quantity : str, min_lat : float, max_lat : float, min_lon 
     if (nmax is None) and (shcs_type in ['gfc','bin','mtx','tbl','dov']):
         nmax = ph.shc.Shc.nmax_from_file(shcs_type,shcs_data)
     if quantity == 'topo':
-        GM = GM if (GM is not None) else 1
-        R = R if (R is not None) else 1
+        GM =  1.0
+        R = 1.0
     
     # READ SH COEFFICIENTS FROM FILE------------------------------------------------------------------------------------
-
-    shcs = read_shcs(shcs_data,shcs_type,nmin,nmax,GM,R,ellipsoid)
+    if shcs_type.lower().strip() in ['gfc','bin','mtx','tbl','dov']:
+        shcs = read_shcs(shcs_data,shcs_type,nmin,nmax,None,None,ellipsoid)
+    else:
+        shcs = read_shcs(shcs_data,shcs_type,nmin,nmax,GM,R,ellipsoid)
 
     if nmax is None:
         nmax = shcs.nmax
@@ -272,8 +277,8 @@ def grid_sh_synthesis(quantity : str, min_lat : float, max_lat : float, min_lon 
 
 
     ## get points 
-    points_lon = np.repeat(np.expand_dims(longitudes,0),len(points.lat),axis=0)
-    points_lat = np.repeat((latitudes).reshape(-1,1),len(points.lon),axis=1)
+    points_lon = np.repeat(np.expand_dims(longitudes,0),len(latitudes),axis=0)
+    points_lat = np.repeat((latitudes).reshape(-1,1),len(longitudes),axis=1)
 
 
     if DTM_raster is not None and DTM_shcs_data is not None:
@@ -307,8 +312,8 @@ def grid_sh_synthesis(quantity : str, min_lat : float, max_lat : float, min_lon 
     latitudes, longitudes, radius = np.radians(latitudes) \
     , np.radians(longitudes), np.ascontiguousarray(sphere_radii)
 
-    if quantity == 'topo':
-        radius[:] = R # r is also set to 1 in shcs for topography synthesis, so upward continuation term becomes 1
+    if quantity in ['topo','tws','smd']:
+        radius[:] = 1.0 # r is also set to 1 in shcs for topography synthesis, so upward continuation term becomes 1
 
     if quantity in ['zeta', 'N', 'zeta_ell'] and (h_ell is not None and h_ell.max() > 1e-6):
         raise ValueError("Height must be set to zero if computing geoid undulation or height anomaly on a grid.")
