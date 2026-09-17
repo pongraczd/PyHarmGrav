@@ -1,6 +1,5 @@
 __pycache__/
 pyharmgrav/__pycache__
-docs/
 pyharmgrav.egg-info/
 output/
 input_data/EIGEN-6C4.gfc
