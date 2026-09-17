@@ -1,9 +1,19 @@
+# Runtime dependencies
 numpy
-pyharm
+pyharm>=0.4.9
+scipy
+h5py
+rasterio
+threadpoolctl
 xarray
 rioxarray
-scipy
-matplotlib
-h5py
-PyQt5
 netCDF4
+PyQt5
+
+# Notebook dependencies
+matplotlib
+cartopy
+
+# Documentation dependencies
+sphinx
+sphinx-rtd-theme

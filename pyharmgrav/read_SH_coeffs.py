@@ -1,6 +1,7 @@
 import pyharm as ph
 import numpy as np
 import os
+import re
 
 def read_bhsc(file_path,GM=1,R=1,nmax=None):
     """
@@ -67,7 +68,7 @@ def read_bhsc(file_path,GM=1,R=1,nmax=None):
     SHCs = ph.shc.Shc.from_arrays(input_nmax,C_out,S_out,GM,R)
     return SHCs
 
-def table_to_shcs(array,GM,R,nmax):
+def _table_to_shcs(array,GM,R,nmax):
     n = (array[:,0]).astype(np.uint16)
     m = (array[:,1]).astype(np.uint16)
     Cnm_arr = (array[:,2])
@@ -120,7 +121,7 @@ def read_dat(file_path,GM=1,R=1,nmax=None):
     """
     # Read raw data from file
     raw_data = np.loadtxt(file_path)
-    SHCs = table_to_shcs(raw_data,GM,R,nmax)
+    SHCs = _table_to_shcs(raw_data,GM,R,nmax)
     return SHCs
 
 def read_mat(file_path,GM=1,R=1,nmax=None):
@@ -145,5 +146,102 @@ def read_mat(file_path,GM=1,R=1,nmax=None):
         assert len(key_list) ==1 , 'Only 1 variable should be present in .mat file'
         varname = key_list[0]
         data = np.array(raw_data[varname])
-    SHCs = table_to_shcs(data,GM,R,nmax)
+    SHCs = _table_to_shcs(data,GM,R,nmax)
     return SHCs
+
+def read_ICGEM_harmonics(
+    model_file: str ,
+    error: bool = False,
+    **kwargs,
+):
+    """
+    Extract gravity model spherical harmonics from GFZ ICGEM ``gfc`` files
+
+    Parameters
+    ----------
+    model_file: str
+        full path to gfc spherical harmonic data file
+    error : bool, default False
+        Flag to read error of coefficients from gfc file or values only
+    LMAX: int or NoneType, default None
+        maximum degree and order of output spherical harmonics
+    FLAG: str, default 'gfc'
+        Flag denoting data lines
+
+    Returns
+    -------
+    if error = True
+        SHCs : ph.shc.Shc
+            Spherical harmonic coefficients
+        SHCs_error : ph.shc.Shc 
+            Errors of spherical harmonic coefficients
+    else
+        SHCs : ph.shc.Shc
+            Spherical harmonic coefficients
+    """
+    # set default keyword argument
+    kwargs.setdefault('FLAG', 'gfc')
+
+    model_params =  {}
+    # read gravity field coefficients file
+    with open(model_file, mode='r', encoding='utf8') as f:
+        file_contents = f.read().splitlines()
+    # extract parameters from header
+    header_parameters = [
+        'earth_gravity_constant',
+        'radius',
+        'max_degree'
+    ]
+    parameters_regex = '(' + '|'.join(header_parameters) + ')'
+    header = [l for l in file_contents if re.match(parameters_regex, l)]
+    for line in header:
+        # split the line into individual components
+        line_contents = line.split()
+        model_params[line_contents[0]] = line_contents[1]
+    # set degree of truncation from model if not presently set
+    LMAX = kwargs.get('LMAX') or np.int64(model_params['max_degree'])
+    # update maximum degree attribute if truncating
+    if LMAX != np.int64(model_params['max_degree']):
+        model_params['max_degree'] = str(LMAX)
+    # output dimensions
+    l = np.arange(LMAX + 1)
+    m = np.arange(LMAX + 1)
+    # allocate for each coefficient
+    clm = np.zeros((LMAX + 1, LMAX + 1))
+    slm = np.zeros((LMAX + 1, LMAX + 1))
+    if error:
+        eclm = np.zeros((LMAX + 1, LMAX + 1))
+        eslm = np.zeros((LMAX + 1, LMAX + 1))
+
+    # reduce file_contents to input data using data marker flag
+    input_data = [l for l in file_contents if re.match(kwargs['FLAG'], l)]
+    # for each line of data in the gravity file
+    for line in input_data:
+        # split the line into individual components replacing fortran d
+        line_contents = re.sub('d', 'e', line, flags=re.IGNORECASE).split()
+        # degree and order for the line
+        l1 = int(line_contents[1])
+        m1 = int(line_contents[2])
+        # if degree and order are below the truncation limits
+        if (l1 <= LMAX) and (m1 <= LMAX):
+            clm[l1, m1] = np.float64(line_contents[3])
+            slm[l1, m1] = np.float64(line_contents[4])
+            # check if model contains errors
+            if error:
+                eclm[l1, m1] = np.float64(line_contents[5])
+                eslm[l1, m1] = np.float64(line_contents[6])
+    # flatten to column-major order and remove upper triangle
+    mask_out = np.tri(LMAX+1,dtype=bool)
+    C_out = clm.T[mask_out.T]
+    S_out = slm.T[mask_out.T]
+    if error:
+        E_C_out = eclm.T[mask_out.T]
+        E_S_out = eslm.T[mask_out.T]
+    GM = model_params['earth_gravity_constant']
+    R = model_params['radius']
+    SHCs = ph.shc.Shc.from_arrays(LMAX,C_out,S_out,GM,R)
+    if error:
+        SHCs.error = ph.shc.Shc.from_arrays(LMAX,E_C_out,E_S_out,GM,R)
+        return SHCs, SHCs.error
+    else:
+        return SHCs

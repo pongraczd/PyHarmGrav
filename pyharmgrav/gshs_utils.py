@@ -1,14 +1,18 @@
-import pyharm as ph
-from .normal_grav_field import Ellipsoid
 import numpy as np
-from .read_SH_coeffs import read_bhsc, read_dat, read_mat
-from os.path import splitext, join
-import warnings
 from numpy.typing import NDArray
-import rasterio as rio
 from scipy.interpolate import interpn
+import pyharm as ph
+from os.path import splitext, join
+import rasterio as rio
 import re
 from pathlib import Path
+from .normal_grav_field import Ellipsoid
+from .read_SH_coeffs import read_bhsc, read_dat, read_mat
+import warnings
+from .gshs_shbundle import gshs_point
+
+
+
 
 def love_n(n : int|NDArray) -> float|NDArray:
     MODULE_DIR = Path(__file__).resolve().parent
@@ -540,7 +544,7 @@ def SH_synthesis(points : ph.crd.PointGrid|ph.crd.PointSctr,shcs : ph.shc.Shc,po
             if (DTM_shcs_data is None) and (quantity == 'N' or h_ell is None or h_ell.max()<1e-10):
                 raise ValueError("DTM is required for geoid undulation or height anomaly")
 
-            if DTM_shcs_type is not None:
+            if DTM_shcs_data is not None:
                 DTM_shcs_type = splitext(DTM_shcs_data)[1][1:]  # remove the dot
                 DTM_shcs = read_shcs(DTM_shcs_data,DTM_shcs_type,0,nmax,ellipsoid=ellipsoid,GM=1,R=1)
                 radius = points.r
@@ -635,3 +639,34 @@ def SH_synthesis(points : ph.crd.PointGrid|ph.crd.PointSctr,shcs : ph.shc.Shc,po
         else:
             return smd / 1000
 
+
+def SH_error_synthesis(points : ph.crd.PointGrid|ph.crd.PointSctr,shcs : ph.shc.Shc,quantity : str, nmax : int|None = None) -> NDArray:
+    """
+    Synthesize error estimates for gravitational and gravity field quantities from spherical harmonic coefficients.
+    This function computes the standard deviation of various gravity field functionals (potential, gravity, gravity gradients,
+    geoid undulation, etc.) at specified points using spherical harmonic synthesis of the error coefficients.
+    NOT FOR DIRECT USE
+    Used by:
+        pyharmgrav.point_sh_synthesis
+        pyharmgrav.grid_sh_synthesis"""
+
+    if quantity in ['W','V','T','N','zeta','zeta_ell']:
+        quant = 'potential'
+    elif quantity in ['g_abs','dg_dist']:
+        quant = 'gravity'
+    elif quantity in ['dg']:
+        quant = 'gravity anomaly'
+    elif quantity in ['W_zz','V_zz','T_zz']:
+        quant = 'vertical gradient'
+    elif quantity == 'topo':
+        quant = 'none'
+    else:
+        raise ValueError(f"Quantity '{quantity}' is not supported for error synthesis.")
+
+    f = gshs_point(points, shcs, nmax, error=True,quantity=quant)
+
+    if quantity in ['N','zeta','zeta_ell']:
+        gamma0 = shcs.mu / shcs.r**2
+        f = f / gamma0
+
+    return f

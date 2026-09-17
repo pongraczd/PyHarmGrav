@@ -1,32 +1,119 @@
-from pyharmgrav import point_sh_synthesis, grid_sh_synthesis
 import numpy as np
+
+from pyharmgrav.gshs import grid_sh_synthesis, point_sh_synthesis
+
 
 gpm_path = "./input_data/EGM96.mat"
 points_path = "./input_data/sample_points.txt"
 dtm_path = "./input_data/DTM2006.mat"
 points0_path = "./input_data/sample_points_h0.txt"
-GM = 3986004.415E+8
+GM = 3986004.415e8
 R = 6378136.3
 
-points = np.loadtxt(points_path)[:,1:]
+points = np.loadtxt(points_path)[:, 1:]
 points0 = np.loadtxt(points0_path)
 
-# example 1: geoid undulation synthesis on grid , nmax not specified, model up to nmax=2190
-print('geoid')
-result = grid_sh_synthesis('N',45,49,15,20,1,gpm_path,'minutes',0,None,'GRS80','ellipsoid',0,None,GM,R,dtm_path,False)
-print(result)
-# example 2: topography synthesis on grid , nmax = 6500 , model up to nmax=10800
-topo = grid_sh_synthesis('topo',45,49,15,20,1,dtm_path,'minutes',0,300,'GRS80','ellipsoid',0,None,1,1,None,False)
-print(topo) # passed without error
-# example 3
-result2 = point_sh_synthesis(points0,gpm_path,'ellipsoidal','N',0,None,'GRS80',GM,R,dtm_path)
+# Example 1: geoid undulation on a grid; nmax is inferred as 360.
+print("geoid")
+geoid, geoid_coords = grid_sh_synthesis(
+    quantity="N",
+    min_lat=45,
+    max_lat=49,
+    min_lon=15,
+    max_lon=20,
+    resolution=1,
+    shcs_data=gpm_path,
+    resolution_unit="minutes",
+    nmin=0,
+    nmax=None,
+    ellipsoid="GRS80",
+    ref_surface_type="ellipsoid",
+    height=0,
+    GM=GM,
+    R=R,
+    DTM_shcs_data=dtm_path,
+    normal_field_removed=False,
+)
+print(geoid)
+
+# Example 2: topography on a grid, truncated to degree 300 (model nmax=360).
+topo, topo_coords = grid_sh_synthesis(
+    quantity="topo",
+    min_lat=45,
+    max_lat=49,
+    min_lon=15,
+    max_lon=20,
+    resolution=1,
+    shcs_data=dtm_path,
+    resolution_unit="minutes",
+    nmin=0,
+    nmax=300,
+    ellipsoid="GRS80",
+    ref_surface_type="ellipsoid",
+    height=0,
+    GM=1,
+    R=1,
+    normal_field_removed=False,
+)
+print(topo)
+
+# Example 3: geoid undulation at zero-height ellipsoidal points.
+result2 = point_sh_synthesis(
+    points=points0,
+    shcs_data=gpm_path,
+    points_type="ellipsoidal",
+    quantity="N",
+    nmin=0,
+    nmax=None,
+    ellipsoid="GRS80",
+    GM=GM,
+    R=R,
+    DTM_shcs_data=dtm_path,
+    normal_field_removed=False,
+)
 print(result2)
-#example 4: point synthesis with nmin + nmax, dg
-result3 = point_sh_synthesis(points,gpm_path,'ellipsoidal','dg',10,None,'GRS80',GM,R,dtm_path)
+
+# Example 4: gravity anomaly from degree 10 through the model's maximum degree.
+result3 = point_sh_synthesis(
+    points=points,
+    shcs_data=gpm_path,
+    points_type="ellipsoidal",
+    quantity="dg",
+    nmin=10,
+    nmax=None,
+    ellipsoid="GRS80",
+    GM=GM,
+    R=R,
+    normal_field_removed=False,
+)
 print(result3)
-#example 5: point synthesis , xi
-result4 = point_sh_synthesis(points,gpm_path,'ellipsoidal','xi',0,None,'GRS80',GM,R)
+
+# Example 5: north component of the vertical deflection.
+result4 = point_sh_synthesis(
+    points=points,
+    shcs_data=gpm_path,
+    points_type="ellipsoidal",
+    quantity="xi",
+    nmin=0,
+    nmax=None,
+    ellipsoid="GRS80",
+    GM=GM,
+    R=R,
+    normal_field_removed=False,
+)
 print(result4)
-#example 6: point synthesis of zeta
-result5 = point_sh_synthesis(points,gpm_path,'ellipsoidal','zeta',0,None,'GRS80',GM,R)
+
+# Example 6: generalized height anomaly at nonzero ellipsoidal heights.
+result5 = point_sh_synthesis(
+    points=points,
+    shcs_data=gpm_path,
+    points_type="ellipsoidal",
+    quantity="zeta_ell",
+    nmin=0,
+    nmax=None,
+    ellipsoid="GRS80",
+    GM=GM,
+    R=R,
+    normal_field_removed=False,
+)
 print(result5)

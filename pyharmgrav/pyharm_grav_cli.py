@@ -1,109 +1,244 @@
-import numpy as np 
-from .pyharm_grav_shs import point_sh_synthesis, grid_sh_synthesis
 import argparse
-import sys
-import copy
+from collections.abc import Mapping
+from pathlib import Path
+
+import numpy as np
+
+from .gshs import grid_sh_synthesis, point_sh_synthesis
+
+
+GRID_SYNTHESIS_PARAMETERS = (
+    'quantity', 'min_lat', 'max_lat', 'min_lon', 'max_lon', 'resolution',
+    'shcs_data', 'resolution_unit', 'nmin', 'nmax', 'ellipsoid',
+    'ref_surface_type', 'height', 'GM', 'R', 'DTM_shcs_data', 'DTM_raster',
+    'tide_system_conversion', 'normal_field_removed',
+)
+GRID_CLI_PARAMETERS = GRID_SYNTHESIS_PARAMETERS + ('output_file',)
+GRID_REQUIRED_PARAMETERS = (
+    'quantity', 'min_lat', 'max_lat', 'min_lon', 'max_lon', 'resolution',
+    'shcs_data', 'output_file',
+)
+
+POINT_SYNTHESIS_PARAMETERS = (
+    'shcs_data', 'points_type', 'quantity', 'nmin', 'nmax', 'ellipsoid',
+    'GM', 'R', 'DTM_shcs_data', 'DTM_raster', 'tide_system_conversion',
+    'normal_field_removed',
+)
+POINT_CLI_PARAMETERS = (
+    'input_file', 'points_type', 'shcs_data', 'quantity', 'nmin', 'nmax',
+    'ellipsoid', 'GM', 'R', 'DTM_shcs_data', 'DTM_raster', 'point_numbers',
+    'tide_system_conversion', 'output_file', 'normal_field_removed',
+)
+POINT_REQUIRED_PARAMETERS = (
+    'input_file', 'points_type', 'shcs_data', 'quantity', 'output_file',
+)
+
+
+def _parse_bool(value):
+    """Parse common command-line boolean representations."""
+    if isinstance(value, bool):
+        return value
+    normalized = value.casefold()
+    if normalized in {'1', 'true', 'yes', 'on'}:
+        return True
+    if normalized in {'0', 'false', 'no', 'off'}:
+        return False
+    raise argparse.ArgumentTypeError(
+        f"expected a boolean value, received {value!r}"
+    )
+
 
 def load_config(config_file):
     params = {}
     try:
-        exec(compile(open(config_file, "rb").read(), config_file, 'exec'),params)
-    except: #if config file not correct, give syntax and exit
-        sys.stdout.write("\nError: Cannot Load Parameters. Configuration file not given or does not exist.\n")
-        sys.exit()
-    params.pop('__builtins__')
-    return params
+        source = Path(config_file).read_bytes()
+        exec(compile(source, str(config_file), 'exec'), params)
+    except Exception as exc:
+        raise ValueError(
+            f"Cannot load configuration file {str(config_file)!r}: {exc}"
+        ) from exc
+    return {
+        name: value
+        for name, value in params.items()
+        if name != '__builtins__'
+    }
 
-def calc_grid(config):
+
+def _validate_params(params, allowed, required):
+    if not isinstance(params, Mapping):
+        raise TypeError('Parameters must be supplied as a mapping')
+
+    unknown = sorted(set(params) - set(allowed))
+    if unknown:
+        raise ValueError(f"Unsupported parameters: {', '.join(unknown)}")
+
+    missing = [name for name in required if params.get(name) is None]
+    if missing:
+        raise ValueError(f"Missing required parameters: {', '.join(missing)}")
+
+
+def _normalize_grid_result(result, coords):
+    n_lat = len(coords['latitude'])
+    n_lon = len(coords['longitude'])
+    result = np.asarray(result)
+
+    if result.shape == (n_lat, n_lon):
+        return result
+    if result.size == n_lat * n_lon:
+        return result.reshape(n_lat, n_lon)
+    raise ValueError('Grid result shape does not match the coordinate arrays')
+
+
+def _write_grid_output(outfile, result, coords, quantity):
+    suffix = Path(outfile).suffix.lower()
+
+    if suffix in {'.nc', '.tif'}:
+        import xarray as xr
+        import rioxarray  # noqa: F401 - registers the ``rio`` accessor
+
+        data_coords = {
+            'latitude': coords['latitude'],
+            'longitude': coords['longitude'],
+        }
+        result_ds = xr.DataArray(
+            result,
+            dims=('latitude', 'longitude'),
+            coords=data_coords,
+            name=quantity,
+        )
+
+        result_ds.rio.set_spatial_dims(
+            x_dim='longitude', y_dim='latitude', inplace=True
+        )
+        result_ds.rio.write_crs(4326, inplace=True)
+
+        if suffix == '.nc':
+            result_ds.to_netcdf(outfile)
+        else:
+            result_ds.astype('float32').rio.to_raster(outfile)
+        return
+
+    if suffix in {'.dat', '.txt'}:
+        lat_grid = np.repeat(
+            np.asarray(coords['latitude']).reshape(-1, 1),
+            len(coords['longitude']),
+            axis=1,
+        )
+        lon_grid = np.repeat(
+            np.asarray(coords['longitude']).reshape(1, -1),
+            len(coords['latitude']),
+            axis=0,
+        )
+        values = result.reshape(-1, 1)
+        out_array = np.column_stack(
+            (lat_grid.ravel(), lon_grid.ravel(), values)
+        )
+        fmt = ['%.8f', '%.8f'] + ['%.12e'] * values.shape[1]
+        np.savetxt(outfile, out_array, fmt=fmt)
+        return
+
+    raise ValueError('Not recognised output file type')
+
+
+def calc_grid(params):
     print('Grid synthesis')
-    params = load_config(config)
-    outfile = params['output_file']
-    params.pop('output_file')
-    result ,coords = grid_sh_synthesis(**params)
-    if outfile.endswith('.nc'):
-        import xarray as xr
-        import rioxarray
-        result_ds = xr.DataArray(result,coords,name=params['quantity'])
-        result_ds.rio.write_crs(4326, inplace=True)
-        result_ds.to_netcdf(outfile)
-    elif outfile.endswith('.tif'):
-        import xarray as xr
-        import rioxarray
-        result_ds = xr.DataArray(result,coords,name=params['quantity']).astype("float32")
-        result_ds.rio.write_crs(4326, inplace=True)
-        result_ds.rio.to_raster(outfile)
-    elif outfile.endswith('.dat') or outfile.endswith('.txt'):
-        lat_grid = np.repeat((coords['latitude']).reshape(-1,1),len(coords['longitude']),axis=1)
-        lon_grid = np.repeat(np.expand_dims(coords['longitude'],0),len(coords['latitude']),axis=0)
-        out_array = np.vstack((lat_grid.ravel(),lon_grid.ravel(),result.ravel())).T
-        np.savetxt(outfile,out_array,fmt='%.8f %.8f %.12e')
-    else:
-        raise ValueError('Not recognised output file type')
+    _validate_params(
+        params, GRID_CLI_PARAMETERS, GRID_REQUIRED_PARAMETERS
+    )
+    if not isinstance(params['quantity'], str):
+        raise ValueError('Grid synthesis accepts exactly one quantity')
+    if params['quantity'] == 'g':
+        raise ValueError(
+            "Grid synthesis does not support the three-component 'g' vector"
+        )
 
-def calc_point(config,file):
+    synthesis_params = {
+        name: params[name]
+        for name in GRID_SYNTHESIS_PARAMETERS
+        if name in params
+    }
+    result, coords = grid_sh_synthesis(**synthesis_params)
+    result = _normalize_grid_result(result, coords)
+    _write_grid_output(
+        params['output_file'], result, coords, params['quantity']
+    )
+
+def _normalize_point_result(result, n_points, quantity):
+    result = np.asarray(result)
+    if result.ndim == 1 and result.shape[0] == n_points:
+        return result.reshape(-1, 1)
+    if result.ndim == 2 and result.shape[0] == n_points:
+        return result
+    raise ValueError(
+        f"Result shape for quantity {quantity!r} does not match the input points"
+    )
+
+
+def calc_point(params):
     print('Point synthesis')
-    if file :
-        point_numbers = True
-        params = load_config(config)
-        
-    else:
-        params = config
-
+    _validate_params(
+        params, POINT_CLI_PARAMETERS, POINT_REQUIRED_PARAMETERS
+    )
     input_file = params['input_file']
     output_file = params['output_file']
-    params.pop('input_file')
-    params.pop('output_file')
-    
-    if 'point_numbers' in params.keys():
-        point_numbers = params['point_numbers']
-        params.pop('point_numbers')
-    data_in_file = np.loadtxt(input_file)
+    point_numbers = params.get('point_numbers', True)
+
+    data_in_file = np.atleast_2d(np.loadtxt(input_file))
     if point_numbers:
-        point_coords = data_in_file[:,1:]
+        point_coords = data_in_file[:, 1:].copy()
     else:
-        point_coords = data_in_file
-    params['points'] = point_coords
-    if isinstance(params['quantity'], list):
-        assert len(list(set(params['quantity']))) == len(params['quantity']), "Duplicates in quantities"
-        result = []
-        for quantity in params['quantity']:
-            params_local = params.copy()
-            params_local['quantity'] = quantity
-            result_temp = point_sh_synthesis(**params_local)
-            result_temp=result_temp.reshape(-1,1)
-            result.append(result_temp)
-        result = np.hstack(result)
-        quantity_num = len(params['quantity'])
-        if 'g' in params['quantity']:
-            quantity_num +=2
-        if point_numbers:
-            out_format = '%d %.8f %.8f %.3f ' + quantity_num * '%.12e '
-        else:
-            out_format = '%.8f %.8f %.3f ' + quantity_num * '%.12e '
-        out_format = out_format.strip()
+        point_coords = data_in_file.copy()
+
+    if point_coords.shape[1] not in {2, 3}:
+        expected = 'three or four' if point_numbers else 'two or three'
+        raise ValueError(
+            f'Point input must contain {expected} columns per row'
+        )
+
+    quantity_value = params['quantity']
+    if isinstance(quantity_value, (list, tuple)):
+        quantities = list(quantity_value)
     else:
-        result = point_sh_synthesis(**params)
-        if result.ndim == 1:
-            result = result.reshape(-1,1)
-        if point_numbers:
-            if params['quantity'] == 'g':
-                out_format = '%d %.8f %.8f %.3f %.12e %.12e %.12e'
-            else:
-                out_format = '%d %.8f %.8f %.3f %.12e'
-        else:
-            if params['quantity'] == 'g':
-                out_format = '%.8f %.8f %.3f %.12e %.12e %.12e'
-            else:
-                out_format = '%.8f %.8f %.3f %.12e'
+        quantities = [quantity_value]
+
+    if not quantities or any(not isinstance(item, str) for item in quantities):
+        raise ValueError('Quantities must be specified as one or more strings')
+    if len(set(quantities)) != len(quantities):
+        raise ValueError('Duplicate quantities are not allowed')
+
+    base_params = {
+        name: params[name]
+        for name in POINT_SYNTHESIS_PARAMETERS
+        if name in params and name != 'quantity'
+    }
+    result_columns = []
+    for quantity in quantities:
+        synthesis_params = base_params.copy()
+        synthesis_params['points'] = point_coords.copy()
+        synthesis_params['quantity'] = quantity
+        result_temp = point_sh_synthesis(**synthesis_params)
+        result_columns.append(
+            _normalize_point_result(
+                result_temp, point_coords.shape[0], quantity
+            )
+        )
+    result = np.hstack(result_columns)
+
     if point_coords.shape[1] == 2:
-        height = np.zeros((data_in_file.shape[0],1))
+        height = np.zeros((data_in_file.shape[0], 1))
         data_in_file = np.hstack((data_in_file, height))
+
     output_array = np.hstack((data_in_file, result))
-    np.savetxt(output_file,output_array,fmt=out_format)
+    if point_numbers:
+        out_format = ['%d', '%.8f', '%.8f', '%.3f']
+    else:
+        out_format = ['%.8f', '%.8f', '%.3f']
+    out_format.extend(['%.12e'] * result.shape[1])
+    np.savetxt(output_file, output_array, fmt=out_format)
 
 
 
-def main():
+def build_parser():
     parser = argparse.ArgumentParser(description="PyHarmGrav")
     subparsers = parser.add_subparsers(dest='command', required=True)
 
@@ -111,7 +246,7 @@ def main():
     # config file
     parser_grid.add_argument('config',nargs='?', help='Path to config file')
     # options if no config file is used
-    parser_grid.add_argument('--quantity',type=str,nargs='+')
+    parser_grid.add_argument('--quantity',type=str)
     parser_grid.add_argument('--min_lat',type=float)
     parser_grid.add_argument('--max_lat',type=float)
     parser_grid.add_argument('--min_lon',type=float)
@@ -130,9 +265,19 @@ def main():
     parser_grid.add_argument('--DTM_raster',type=str)
     parser_grid.add_argument('--tide_system_conversion',type=str,nargs=2)
     parser_grid.add_argument('--output_file',type=str)
-    parser_grid.add_argument('--normal_field_removed',default=False)
+    parser_grid.add_argument(
+        '--normal_field_removed',
+        nargs='?',
+        const=True,
+        type=_parse_bool,
+        default=False,
+    )
 
-    parser_grid.set_defaults(func=calc_grid)
+    parser_grid.set_defaults(
+        handler=calc_grid,
+        parameter_names=GRID_CLI_PARAMETERS,
+        required_names=GRID_REQUIRED_PARAMETERS,
+    )
 
     parser_point = subparsers.add_parser('point',help='Compute at scattered points')
     # config file
@@ -153,22 +298,41 @@ def main():
     parser_point.add_argument('--no_point_numbers', action='store_false', dest='point_numbers')
     parser_point.add_argument('--tide_system_conversion',type=str,nargs=2)
     parser_point.add_argument('--output_file',type=str)
-    parser_point.add_argument('--normal_field_removed',default=False)
+    parser_point.add_argument(
+        '--normal_field_removed',
+        nargs='?',
+        const=True,
+        type=_parse_bool,
+        default=False,
+    )
 
-    parser_point.set_defaults(func=calc_point)
-    args = parser.parse_args()
-    print(args)
-    print(args.func)
-    args_config = args.config
-    if args_config:
-        args.func(args_config,True)
-    else:
-        args_dict = copy.deepcopy(vars(args))
-        args_dict.pop("config")
-        args_dict.pop("command")
-        args_dict.pop("func")
-        print(args)
-        args.func(args_dict,False)
+    parser_point.set_defaults(
+        handler=calc_point,
+        parameter_names=POINT_CLI_PARAMETERS,
+        required_names=POINT_REQUIRED_PARAMETERS,
+    )
+    return parser
+
+
+def main(argv=None):
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    try:
+        if args.config:
+            params = load_config(args.config)
+        else:
+            params = {
+                name: getattr(args, name)
+                for name in args.parameter_names
+            }
+        _validate_params(
+            params, args.parameter_names, args.required_names
+        )
+    except (TypeError, ValueError) as exc:
+        parser.error(str(exc))
+
+    args.handler(params)
     
 if __name__ == '__main__':
     main()

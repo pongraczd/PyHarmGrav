@@ -3,63 +3,131 @@ import numpy as np
 import os
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QPushButton, QStackedWidget, QGridLayout,
-    QVBoxLayout, QGroupBox, QLabel, QLineEdit, QFileDialog, QHBoxLayout, QCheckBox, QComboBox, QRadioButton, QButtonGroup
+    QVBoxLayout, QGroupBox, QLabel, QLineEdit, QFileDialog, QHBoxLayout,
+    QCheckBox, QComboBox, QRadioButton, QButtonGroup, QScrollArea
 )
 #from PyQt5.QtCore import QSize
 from PyQt5.QtGui import QGuiApplication,QIcon
 from PyQt5.QtCore import QCoreApplication
 import datetime
-from .pyharm_grav_shs import point_sh_synthesis, grid_sh_synthesis
+from .gshs import point_sh_synthesis, grid_sh_synthesis
 
-def calc_point(input_file, point_numbers,output_file ,shcs_data, points_type, quantity , nmin , nmax , ellipsoid , GM , R , DTM_shcs_data , normal_field_removed):
-    data_in_file = np.loadtxt(input_file)
+
+def calc_point(
+    input_file, point_numbers, output_file, shcs_data, points_type, quantity,
+    nmin, nmax, ellipsoid, GM, R, DTM_shcs_data=None, DTM_raster=None,
+    tide_system_conversion=None, normal_field_removed=False,
+):
+    data_in_file = np.atleast_2d(np.loadtxt(input_file))
     if point_numbers:
-        points = data_in_file[:,1:]
+        points = data_in_file[:, 1:].copy()
     else:
-        points = data_in_file
-    if isinstance(quantity, list):
-        result = []
-        for quantity_item in quantity:
-            result_temp = point_sh_synthesis(points ,shcs_data , points_type , quantity_item , nmin , nmax , ellipsoid , GM , R , DTM_shcs_data, normal_field_removed)
-            result_temp=result_temp.reshape(-1,1)
-            result.append(result_temp)
-        result = np.hstack(result)
-        quantity_num = len(quantity)
-        if 'g' in quantity:
-            quantity_num +=2
-        if point_numbers:
-            out_format = '%d %.8f %.8f %.3f ' + quantity_num * '%.12e '
-        else:
-            out_format = '%.8f %.8f %.3f ' + quantity_num * '%.12e '
-        out_format = out_format.strip()
+        points = data_in_file.copy()
+
+    if points.shape[1] not in {2, 3}:
+        raise ValueError('Point coordinates must contain two or three columns')
+
+    quantities = quantity if isinstance(quantity, list) else [quantity]
+    if len(set(quantities)) != len(quantities):
+        raise ValueError('Duplicate quantities are not allowed')
+
+    results = []
+    for quantity_item in quantities:
+        result_temp = np.asarray(point_sh_synthesis(
+            points=points.copy(),
+            shcs_data=shcs_data,
+            points_type=points_type,
+            quantity=quantity_item,
+            nmin=nmin,
+            nmax=nmax,
+            ellipsoid=ellipsoid,
+            GM=GM,
+            R=R,
+            DTM_shcs_data=DTM_shcs_data,
+            DTM_raster=DTM_raster,
+            tide_system_conversion=tide_system_conversion,
+            normal_field_removed=normal_field_removed,
+        ))
+        if result_temp.ndim == 1:
+            result_temp = result_temp.reshape(-1, 1)
+        if result_temp.ndim != 2 or result_temp.shape[0] != points.shape[0]:
+            raise ValueError(
+                f"Unexpected result shape for quantity {quantity_item!r}"
+            )
+        results.append(result_temp)
+    result = np.hstack(results)
+
+    if points.shape[1] == 2:
+        data_in_file = np.hstack(
+            (data_in_file, np.zeros((data_in_file.shape[0], 1)))
+        )
+
+    if point_numbers:
+        out_format = ['%d', '%.8f', '%.8f', '%.3f']
     else:
-        result = point_sh_synthesis(points ,shcs_data , points_type , quantity , nmin , nmax , ellipsoid , GM , R , DTM_shcs_data, normal_field_removed)
-        if result.ndim == 1:
-            result = result.reshape(-1,1)
-        if point_numbers:
-            if quantity == 'g':
-                out_format = '%d %.8f %.8f %.3f %.12e %.12e %.12e'
-            else:
-                out_format = '%d %.8f %.8f %.3f %.12e'
-        else:
-            out_format = '%.8f %.8f %.3f %.12e'
+        out_format = ['%.8f', '%.8f', '%.3f']
+    out_format.extend(['%.12e'] * result.shape[1])
+
     output_array = np.hstack((data_in_file, result))
-    np.savetxt(output_file,output_array,fmt=out_format)
+    np.savetxt(output_file, output_array, fmt=out_format)
     n_points = output_array.shape[0]
     return n_points
 
-def calc_grid(output_file,quantity , min_lat , max_lat , min_lon , max_lon , resolution , shcs_data , resolution_unit , nmin , nmax , ellipsoid ,ref_surface_type , height ,GM , R , DTM_shcs_data , normal_field_removed):
-    result ,coords = grid_sh_synthesis(quantity , min_lat , max_lat , min_lon , max_lon , resolution , shcs_data , resolution_unit , nmin , nmax , ellipsoid ,ref_surface_type , height ,GM , R , DTM_shcs_data , normal_field_removed)
+
+def calc_grid(
+    output_file, quantity, min_lat, max_lat, min_lon, max_lon, resolution,
+    shcs_data, resolution_unit='degrees', nmin=0, nmax=None,
+    ellipsoid=None, ref_surface_type='ellipsoid', height=0.0, GM=None, R=None,
+    DTM_shcs_data=None, DTM_raster=None, tide_system_conversion=None,
+    normal_field_removed=False,
+):
+    result, coords = grid_sh_synthesis(
+        quantity=quantity,
+        min_lat=min_lat,
+        max_lat=max_lat,
+        min_lon=min_lon,
+        max_lon=max_lon,
+        resolution=resolution,
+        shcs_data=shcs_data,
+        resolution_unit=resolution_unit,
+        nmin=nmin,
+        nmax=nmax,
+        ellipsoid=ellipsoid,
+        ref_surface_type=ref_surface_type,
+        height=height,
+        GM=GM,
+        R=R,
+        DTM_shcs_data=DTM_shcs_data,
+        DTM_raster=DTM_raster,
+        tide_system_conversion=tide_system_conversion,
+        normal_field_removed=normal_field_removed,
+    )
     if output_file.endswith('.nc'):
         import xarray as xr
         import rioxarray
-        result_ds = xr.DataArray(result,coords,name = quantity)
+        result_ds = xr.DataArray(
+            result,
+            dims=('latitude', 'longitude'),
+            coords=coords,
+            name=quantity,
+        )
+        result_ds.rio.set_spatial_dims(
+            x_dim='longitude', y_dim='latitude', inplace=True
+        )
         result_ds.rio.write_crs(4326, inplace=True)
         result_ds.to_netcdf(output_file)
     elif output_file.endswith('.tif'):
         import xarray as xr
         import rioxarray
-        result_ds = xr.DataArray(result,coords,name = quantity).astype("float32")
+        result_ds = xr.DataArray(
+            result,
+            dims=('latitude', 'longitude'),
+            coords=coords,
+            name=quantity,
+        ).astype("float32")
+        result_ds.rio.set_spatial_dims(
+            x_dim='longitude', y_dim='latitude', inplace=True
+        )
         result_ds.rio.write_crs(4326, inplace=True)
         result_ds.rio.to_raster(output_file)
     elif output_file.endswith('.dat') or output_file.endswith('.txt'):
@@ -97,6 +165,14 @@ class MainWindow(QMainWindow):
         central_widget.setLayout(main_layout)
         self.setCentralWidget(central_widget)
 
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_content = QWidget()
+        content_layout = QVBoxLayout()
+        scroll_content.setLayout(content_layout)
+        scroll_area.setWidget(scroll_content)
+        main_layout.addWidget(scroll_area)
+
         # Panel 1: Geopotential model and reference system selection
         panel1 = QGroupBox("Geopotential model and reference system selection")
         panel1.setStyleSheet("QGroupBox { background-color: rgb(220, 220, 235); }")
@@ -130,6 +206,7 @@ class MainWindow(QMainWindow):
         nmin_text = QLabel('nmin')
         nmin.addWidget(nmin_text)
         self.nmin_input = QLineEdit()
+        self.nmin_input.setText('0')
         nmin.addWidget(self.nmin_input)
         self.nmin_input.setMaximumWidth(int(width/7))
         GGM_additional_params.addLayout(nmin)
@@ -142,6 +219,7 @@ class MainWindow(QMainWindow):
         nmax.addWidget(self.nmax_input)
         self.nmax_input.setMaximumWidth(int(width/7))
         GGM_additional_params.addLayout(nmax)
+        self.use_max_GGM.setChecked(True)
 
         #GM
         GM = QVBoxLayout()
@@ -166,17 +244,38 @@ class MainWindow(QMainWindow):
 
         GGM_additional_params.addLayout(scale)
 
-        ellipsoid_list = ["WGS84", "GRS80"]
+        ellipsoid_list = ["GRS80", "WGS84", "Custom"]
         ellipsoid_set = QVBoxLayout()
         ellipsoid_text = QLabel('Ellipsoid')
         ellipsoid_set.addWidget(ellipsoid_text)
         self.ell_combo_box = QComboBox()
         self.ell_combo_box.addItems(ellipsoid_list)
-        #self.ell_combo_box.setMaximumWidth(int(width/6))
         ellipsoid_set.addWidget(self.ell_combo_box)
         GGM_additional_params.addLayout(ellipsoid_set)
 
-        GGM_additional_params2 = QHBoxLayout()
+        custom_ellipsoid_group = QGroupBox("Custom reference ellipsoid")
+        custom_ellipsoid_layout = QGridLayout()
+        custom_ellipsoid_group.setLayout(custom_ellipsoid_layout)
+        self.custom_ellipsoid_inputs = {}
+        custom_parameters = (
+            ('GM', 'GM [m³/s²]'),
+            ('a', 'Semi-major axis a [m]'),
+            ('e', 'First eccentricity e'),
+            ('C_20', 'Fully normalized C₂₀'),
+            ('omega', 'Angular velocity ω [rad/s]'),
+        )
+        for column, (name, label) in enumerate(custom_parameters):
+            custom_ellipsoid_layout.addWidget(QLabel(label), 0, column)
+            field = QLineEdit()
+            custom_ellipsoid_layout.addWidget(field, 1, column)
+            self.custom_ellipsoid_inputs[name] = field
+        custom_ellipsoid_group.setEnabled(False)
+        self.custom_ellipsoid_group = custom_ellipsoid_group
+        self.ell_combo_box.currentTextChanged.connect(
+            self.toggle_custom_ellipsoid
+        )
+
+        GGM_additional_params2 = QGridLayout()
         self.normal_field_removed = QCheckBox("Normal field removed from coefficients")
         SH_topo_label = QLabel('SH coefficients of topography')
         self.imported_SH_topo_file = QLineEdit()
@@ -185,14 +284,52 @@ class MainWindow(QMainWindow):
         browse_topo_input.setStyleSheet("QPushButton { background-color: rgb(200, 200, 255); }")
         browse_topo_input.clicked.connect(self.open_file_dialog_topo)
 
-        GGM_additional_params2.addWidget(self.normal_field_removed)
-        GGM_additional_params2.addWidget(SH_topo_label)
-        GGM_additional_params2.addWidget(browse_topo_input)
-        GGM_additional_params2.addWidget(self.imported_SH_topo_file)
+        clear_topo_input = QPushButton("Clear")
+        clear_topo_input.clicked.connect(self.imported_SH_topo_file.clear)
+
+        DTM_raster_label = QLabel('Digital terrain model raster')
+        self.imported_DTM_raster = QLineEdit()
+        self.imported_DTM_raster.setReadOnly(True)
+        browse_DTM_raster = QPushButton("... Browse")
+        browse_DTM_raster.setStyleSheet("QPushButton { background-color: rgb(200, 200, 255); }")
+        browse_DTM_raster.clicked.connect(self.open_file_dialog_DTM_raster)
+        clear_DTM_raster = QPushButton("Clear")
+        clear_DTM_raster.clicked.connect(self.imported_DTM_raster.clear)
+
+        self.apply_tide_conversion = QCheckBox("Convert tide system")
+        self.source_tide_combo = QComboBox()
+        self.source_tide_combo.addItems(
+            ['Auto-detect', 'tide-free', 'zero-tide', 'mean-tide']
+        )
+        self.target_tide_combo = QComboBox()
+        self.target_tide_combo.addItems(
+            ['tide-free', 'zero-tide', 'mean-tide']
+        )
+        self.source_tide_combo.setEnabled(False)
+        self.target_tide_combo.setEnabled(False)
+        self.apply_tide_conversion.toggled.connect(
+            self.toggle_tide_controls
+        )
+
+        GGM_additional_params2.addWidget(self.normal_field_removed, 0, 0, 1, 5)
+        GGM_additional_params2.addWidget(SH_topo_label, 1, 0)
+        GGM_additional_params2.addWidget(browse_topo_input, 1, 1)
+        GGM_additional_params2.addWidget(self.imported_SH_topo_file, 1, 2)
+        GGM_additional_params2.addWidget(clear_topo_input, 1, 3)
+        GGM_additional_params2.addWidget(DTM_raster_label, 2, 0)
+        GGM_additional_params2.addWidget(browse_DTM_raster, 2, 1)
+        GGM_additional_params2.addWidget(self.imported_DTM_raster, 2, 2)
+        GGM_additional_params2.addWidget(clear_DTM_raster, 2, 3)
+        GGM_additional_params2.addWidget(self.apply_tide_conversion, 3, 0)
+        GGM_additional_params2.addWidget(QLabel('Source'), 3, 1)
+        GGM_additional_params2.addWidget(self.source_tide_combo, 3, 2)
+        GGM_additional_params2.addWidget(QLabel('Target'), 3, 3)
+        GGM_additional_params2.addWidget(self.target_tide_combo, 3, 4)
 
 
         panel1_layout.addLayout(file_layout)
         panel1_layout.addLayout(GGM_additional_params)
+        panel1_layout.addWidget(custom_ellipsoid_group)
         panel1_layout.addLayout(GGM_additional_params2)
 
 
@@ -319,23 +456,49 @@ class MainWindow(QMainWindow):
         panel3.setLayout(panel_3_layout)  # Empty panel for now
 
         # Add widgets to panel 3 layout
-        self.quantity_list =["","Gravitational potential",'topography','Disturbing potential','Gravity potential','Gravity anomaly', 'Gravity disturbance' ,'Gravity vector', 'Gravity',\
-                        "Deflection of vertical - xi", "Deflection of vertical - eta", "Deflection of vertical - theta", "Geoid undulation", "Height anomaly", "Pseudo height anomaly",\
-                        'V_xz','V_yz' ,'V_xy', 'V_xx','V_yy','V_zz', 'V_delta', 'W_xz' ,'W_yz' ,'W_xy', 'W_xx' , 'W_yy', 'W_zz', 'W_delta'  , \
-                        'T_xz' ,'T_yz' ,'T_xy', 'T_xx' , 'T_yy', 'T_zz' , 'T_delta']
-        #quantity_list = ["","Gravitational potential", "Disturbing potential", "Gravity anomaly"]
+        self.quantities = [
+            (None, ''),
+            ('V', 'Gravitational potential'),
+            ('topo', 'Topography'),
+            ('T', 'Disturbing potential'),
+            ('W', 'Gravity potential'),
+            ('dg', 'Gravity anomaly'),
+            ('dg_dist', 'Gravity disturbance'),
+            ('g', 'Gravity vector (north, east, down)'),
+            ('g_abs', 'Gravity magnitude'),
+            ('xi', 'Deflection of vertical - xi'),
+            ('eta', 'Deflection of vertical - eta'),
+            ('theta', 'Deflection of vertical - theta'),
+            ('N', 'Geoid undulation'),
+            ('zeta', 'Height anomaly'),
+            ('zeta_ell', 'Generalized height anomaly'),
+            ('smd', 'Surface mass density'),
+            ('tws', 'Terrestrial water storage'),
+            ('V_xz', 'V_xz'), ('V_yz', 'V_yz'), ('V_xy', 'V_xy'),
+            ('V_xx', 'V_xx'), ('V_yy', 'V_yy'), ('V_zz', 'V_zz'),
+            ('V_delta', 'V_delta'),
+            ('W_xz', 'W_xz'), ('W_yz', 'W_yz'), ('W_xy', 'W_xy'),
+            ('W_xx', 'W_xx'), ('W_yy', 'W_yy'), ('W_zz', 'W_zz'),
+            ('W_delta', 'W_delta'),
+            ('T_xz', 'T_xz'), ('T_yz', 'T_yz'), ('T_xy', 'T_xy'),
+            ('T_xx', 'T_xx'), ('T_yy', 'T_yy'), ('T_zz', 'T_zz'),
+            ('T_delta', 'T_delta'),
+        ]
         combo_selection = QVBoxLayout()
 
         self.quantity_combo_box1 = QComboBox()
-        self.quantity_combo_box1.addItems(self.quantity_list)
+        for code, label in self.quantities:
+            self.quantity_combo_box1.addItem(label, code)
         combo_selection.addWidget(self.quantity_combo_box1)
 
         self.quantity_combo_box2 = QComboBox()
-        self.quantity_combo_box2.addItems(self.quantity_list)
+        for code, label in self.quantities:
+            self.quantity_combo_box2.addItem(label, code)
         combo_selection.addWidget(self.quantity_combo_box2)
 
         self.quantity_combo_box3 = QComboBox()
-        self.quantity_combo_box3.addItems(self.quantity_list)
+        for code, label in self.quantities:
+            self.quantity_combo_box3.addItem(label, code)
         combo_selection.addWidget(self.quantity_combo_box3)
 
         # Enable/disable combo boxes 2 and 3 based on point type selection
@@ -379,10 +542,11 @@ class MainWindow(QMainWindow):
 
 
         # Add panels to main layout
-        main_layout.addWidget(panel1)
-        main_layout.addWidget(panel2)
-        main_layout.addWidget(panel3)
-        main_layout.addWidget(panel4)
+        content_layout.addWidget(panel1)
+        content_layout.addWidget(panel2)
+        content_layout.addWidget(panel3)
+        content_layout.addWidget(panel4)
+        content_layout.addStretch()
 
     def open_file_dialog(self):
         file_name, _ = QFileDialog.getOpenFileName(self, "Select GGM File", "", "All Files (*)")
@@ -392,6 +556,15 @@ class MainWindow(QMainWindow):
         file_name, _ = QFileDialog.getOpenFileName(self, "Select file containing SH coefficients of topography", "", "All Files (*)")
         if file_name:
             self.imported_SH_topo_file.setText(file_name)
+    def open_file_dialog_DTM_raster(self):
+        file_name, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select digital terrain model raster",
+            "",
+            "Raster files (*.tif *.tiff *.nc);;All Files (*)",
+        )
+        if file_name:
+            self.imported_DTM_raster.setText(file_name)
     def open_points_dialog(self):
         file_name, _ = QFileDialog.getOpenFileName(self, "Select point data file", "", "All Files (*)")
         if file_name:
@@ -412,17 +585,56 @@ class MainWindow(QMainWindow):
             self.nmax_input.setStyleSheet("QLineEdit { background-color: white; }")
     
     def update_combo_boxes_state(self, point_type_id):
-            if point_type_id == 0:  # Grid
-                self.quantity_combo_box2.setEnabled(False)
-                self.quantity_combo_box2.setCurrentIndex(0)
-                self.quantity_combo_box3.setEnabled(False)
-                self.quantity_combo_box2.setCurrentIndex(0)
-            elif point_type_id == 1:  # Load points
-                self.quantity_combo_box2.setEnabled(True)
-                self.quantity_combo_box3.setEnabled(True)
-            #elif point_type_id == 2:  # Pointwise
-            #    self.quantity_combo_box2.setEnabled(True)
-            #    self.quantity_combo_box3.setEnabled(True)
+        is_grid = point_type_id == 0
+        self.quantity_combo_box2.setEnabled(not is_grid)
+        self.quantity_combo_box3.setEnabled(not is_grid)
+        if is_grid:
+            self.quantity_combo_box2.setCurrentIndex(0)
+            self.quantity_combo_box3.setCurrentIndex(0)
+
+        for combo_box in (
+            self.quantity_combo_box1,
+            self.quantity_combo_box2,
+            self.quantity_combo_box3,
+        ):
+            gravity_vector_index = combo_box.findData('g')
+            gravity_vector_item = combo_box.model().item(gravity_vector_index)
+            if gravity_vector_item is not None:
+                gravity_vector_item.setEnabled(not is_grid)
+            if is_grid and combo_box.currentData() == 'g':
+                combo_box.setCurrentIndex(0)
+
+    def toggle_custom_ellipsoid(self, ellipsoid_name):
+        self.custom_ellipsoid_group.setEnabled(
+            ellipsoid_name == 'Custom'
+        )
+
+    def toggle_tide_controls(self, checked):
+        self.source_tide_combo.setEnabled(checked)
+        self.target_tide_combo.setEnabled(checked)
+
+    def selected_ellipsoid(self):
+        ellipsoid_name = self.ell_combo_box.currentText()
+        if ellipsoid_name != 'Custom':
+            return ellipsoid_name
+
+        parameters = {}
+        for name, field in self.custom_ellipsoid_inputs.items():
+            if not field.text().strip():
+                raise ValueError(
+                    f'Custom ellipsoid parameter {name} is required'
+                )
+            parameters[name] = float(field.text())
+        return parameters
+
+    def selected_tide_conversion(self):
+        if not self.apply_tide_conversion.isChecked():
+            return None
+        source = self.source_tide_combo.currentText()
+        if source == 'Auto-detect':
+            source = None
+        return (source, self.target_tide_combo.currentText())
+
     def toggle_GM_R(self, checked):
         if checked:
             self.GM_input.clear()
@@ -453,36 +665,57 @@ class MainWindow(QMainWindow):
             nmax = None if use_max_GGM else int(self.nmax_input.text())
             GM = None if self.use_GM_R.isChecked() else float(self.GM_input.text())
             R = None if self.use_GM_R.isChecked() else float(self.scale_input.text())
-        except:
-            self.feedback.setText('ERROR! Geoptotential model parameters not set correctly.')
+            ellipsoid = self.selected_ellipsoid()
+        except (TypeError, ValueError) as exc:
+            self.feedback.setText(
+                f'ERROR! Geopotential model parameters not set correctly: {exc}'
+            )
             QCoreApplication.processEvents()
             return
         normal_field_removed = self.normal_field_removed.isChecked()
-        ellipsoid = self.ell_combo_box.currentText()
-        print(ellipsoid)
-        
+
         DTM_shcs_data = self.imported_SH_topo_file.text()
         if len(DTM_shcs_data) == 0:
             DTM_shcs_data = None
+        DTM_raster = self.imported_DTM_raster.text()
+        if len(DTM_raster) == 0:
+            DTM_raster = None
+        if DTM_shcs_data is not None and DTM_raster is not None:
+            self.feedback.setText(
+                'ERROR! Select either topographic SH coefficients or a DTM '
+                'raster, not both.'
+            )
+            QCoreApplication.processEvents()
+            return
+        tide_system_conversion = self.selected_tide_conversion()
 
 
         # quantity
-        q1_index = self.quantity_combo_box1.currentIndex()
-        q2_index = self.quantity_combo_box2.currentIndex()
-        q3_index = self.quantity_combo_box3.currentIndex()
-        quantity_list_short = [None, 'V', 'topo', 'T', 'W', 'dg', 'dg_dist', 'g', 'g_abs', 'xi', 'eta', 'theta','N', 'zeta', \
-                               'zeta_ell','V_xz', 'V_yz', 'V_xy', 'V_xx', 'V_yy', 'V_zz', 'V_delta', 'W_xz', 'W_yz', 'W_xy', \
-                                'W_xx', 'W_yy', 'W_zz', 'W_delta', 'T_xz', 'T_yz', 'T_xy', 'T_xx', 'T_yy', 'T_zz', 'T_delta']
-        quantity = [quantity_list_short[q1_index],quantity_list_short[q2_index],quantity_list_short[q3_index]]
-        quantity_long = [self.quantity_list[q1_index],self.quantity_list[q2_index],self.quantity_list[q3_index]]
-        quantity = [item for item in quantity if item is not None]
-        quantity_long = [item for item in quantity_long if len(item)>0]
+        quantity_boxes = (
+            self.quantity_combo_box1,
+            self.quantity_combo_box2,
+            self.quantity_combo_box3,
+        )
+        selected_quantities = [
+            (box.currentData(), box.currentText())
+            for box in quantity_boxes
+            if box.currentData() is not None
+        ]
+        quantity = [item[0] for item in selected_quantities]
+        quantity_long = [item[1] for item in selected_quantities]
         if len(list(set(quantity))) != len(quantity):
             self.feedback.setText('ERROR! Duplicates in selected quantities.')
             QCoreApplication.processEvents()
             return
         if len(quantity) == 0:
             self.feedback.setText('ERROR! No quantity selected for synthesis.')
+            QCoreApplication.processEvents()
+            return
+        if self.button_group_ptype.checkedId() == 0 and 'g' in quantity:
+            self.feedback.setText(
+                "ERROR! The three-component 'g' vector is available only "
+                'for loaded points.'
+            )
             QCoreApplication.processEvents()
             return
         if len(quantity) == 1:
@@ -494,6 +727,7 @@ class MainWindow(QMainWindow):
             QCoreApplication.processEvents()
             return
         
+        report = None
         if self.report.isChecked():
             report_file = os.path.splitext(output_file)[0] + 'report.txt'
             report = open(report_file,'w')
@@ -505,6 +739,10 @@ class MainWindow(QMainWindow):
             print(f'Minimum used degree:                        {nmin}',file=report)
             print(f'Maximum used degree:                        {nmax}',file=report)
             print(f'Reference ellipsoid:                        {ellipsoid}',file=report)
+            print(f'Normal field already removed:               {normal_field_removed}',file=report)
+            print(f'Topographic SH coefficients:                {DTM_shcs_data}',file=report)
+            print(f'DTM raster:                                 {DTM_raster}',file=report)
+            print(f'Tide-system conversion:                     {tide_system_conversion}',file=report)
             print(f'Computed:                                   {quantity_long}',file=report)
 
         if self.button_group_ptype.checkedId() == 0:  # Grid
@@ -519,10 +757,10 @@ class MainWindow(QMainWindow):
                 height = float(self.height_above_surface.text())
                 ref_surface_type = 'ellipsoid' if self.button_group_sh_ell.checkedId() == 1 else 'sphere'
                 resolution_unit = self.unit_combo_box.currentText()
-                print(f"Grid selected with latmin={min_lat}, latmax={max_lat}, lonmin={min_lon}, resolution={resolution}, lonmax={max_lon}, unit={resolution_unit}, height_above_surface={height}")
-                #print(f"Reference surface type: {ref_surface_type}")
-            except:
+            except (TypeError, ValueError):
                 self.feedback.setText('ERROR! Some mandatory input parameters not set.')
+                if report is not None:
+                    report.close()
                 QCoreApplication.processEvents()
                 return
             if self.report.isChecked():
@@ -535,9 +773,32 @@ class MainWindow(QMainWindow):
                 print(f'Longitude limit East (deg):                 {max_lon}',file=report)
                 print(f'Height above reference surface (m):         {height}',file=report)
             try:
-                n_lat,n_lon,n_points=calc_grid(output_file,quantity , min_lat , max_lat , min_lon , max_lon , resolution , shcs_data , resolution_unit , nmin , nmax , ellipsoid ,ref_surface_type , height ,GM , R , DTM_shcs_data , normal_field_removed)
-            except ValueError:
-                self.feedback.setText('ERROR! Not recognised output file type.')
+                n_lat, n_lon, n_points = calc_grid(
+                    output_file=output_file,
+                    quantity=quantity,
+                    min_lat=min_lat,
+                    max_lat=max_lat,
+                    min_lon=min_lon,
+                    max_lon=max_lon,
+                    resolution=resolution,
+                    shcs_data=shcs_data,
+                    resolution_unit=resolution_unit,
+                    nmin=nmin,
+                    nmax=nmax,
+                    ellipsoid=ellipsoid,
+                    ref_surface_type=ref_surface_type,
+                    height=height,
+                    GM=GM,
+                    R=R,
+                    DTM_shcs_data=DTM_shcs_data,
+                    DTM_raster=DTM_raster,
+                    tide_system_conversion=tide_system_conversion,
+                    normal_field_removed=normal_field_removed,
+                )
+            except Exception as exc:
+                self.feedback.setText(f'ERROR! {exc}')
+                if report is not None:
+                    report.close()
                 QCoreApplication.processEvents()
                 return
             if self.report.isChecked():
@@ -556,6 +817,8 @@ class MainWindow(QMainWindow):
 
             if len(input_file) == 0:
                 self.feedback.setText('ERROR! NO INPUT FILE GIVEN.')
+                if report is not None:
+                    report.close()
                 QCoreApplication.processEvents()
                 return
 
@@ -565,7 +828,30 @@ class MainWindow(QMainWindow):
                 print(f'Computation started:                        {t1}',file=report)
                 print(f'Type of the input coordinates:              {points_type}',file=report)
 
-            n_points=calc_point(input_file, point_numbers,output_file ,shcs_data, points_type, quantity , nmin , nmax , ellipsoid , GM , R , DTM_shcs_data , normal_field_removed)
+            try:
+                n_points = calc_point(
+                    input_file=input_file,
+                    point_numbers=point_numbers,
+                    output_file=output_file,
+                    shcs_data=shcs_data,
+                    points_type=points_type,
+                    quantity=quantity,
+                    nmin=nmin,
+                    nmax=nmax,
+                    ellipsoid=ellipsoid,
+                    GM=GM,
+                    R=R,
+                    DTM_shcs_data=DTM_shcs_data,
+                    DTM_raster=DTM_raster,
+                    tide_system_conversion=tide_system_conversion,
+                    normal_field_removed=normal_field_removed,
+                )
+            except Exception as exc:
+                self.feedback.setText(f'ERROR! {exc}')
+                if report is not None:
+                    report.close()
+                QCoreApplication.processEvents()
+                return
             if self.report.isChecked():
                 print(f'Number of points:                           {n_points}',file=report)
                 t2 = datetime.datetime.now()
@@ -581,7 +867,18 @@ class MainWindow(QMainWindow):
                         columns = ['Point number', 'Spherical latitude (deg)', 'Longitude (deg)', 'Spherical radius (m)']
                     else:
                         columns = ['Spherical latitude (deg)', 'Longitude (deg)', 'Spherical radius (m)']
-                columns.extend(quantity_long)
+                for code, label in zip(
+                    quantity if isinstance(quantity, list) else [quantity],
+                    quantity_long,
+                ):
+                    if code == 'g':
+                        columns.extend([
+                            'Gravity north [m/s^2]',
+                            'Gravity east [m/s^2]',
+                            'Gravity down [m/s^2]',
+                        ])
+                    else:
+                        columns.append(label)
                 columns_str = ' | '.join(columns)
                 print('Exported data file contains the following columns:',file=report)
                 print(columns_str,file=report)
