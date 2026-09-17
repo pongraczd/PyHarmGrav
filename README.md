@@ -40,3 +40,5 @@ PyHarmGrav can work with multiple reference ellipsoids when computing the
 normal gravity field. It also includes coordinate transformations, tide-system
 conversion, topographic-data handling, and spherical harmonic analysis
 utilities for modelling Earth's crust.
+
+Documentation available at: https://pyharmgrav.readthedocs.io/en/latest/
