@@ -32,7 +32,7 @@ templates_path = ['_templates']
 exclude_patterns = []
 autodoc_typehints = "description"
 
-
+autodoc_mock_imports = ["pyharmgrav.legendre_shbundle"]
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
