@@ -226,7 +226,7 @@ def layerVolume(Re,U, L):
     r_L = Re + L
     return r_U**3 - r_L**3
 
-def compute_Pratt_compensation(Model, rho_cr=None):
+def compute_Pratt_compensation(Model, rho_litho=None):
     Re = Model['Re']
     # import last layer, needed separately
     U_last, L_last, dens_last = import_layer(Model, Model['nlayers'])
@@ -263,12 +263,61 @@ def compute_Pratt_compensation(Model, rho_cr=None):
     layers_mass_sum = layers_mass + rho_last * V_last
 
     # compute average density of the litosphere from the model
-    if rho_cr is None:
-        rho_cr = (layers_mass_sum / weight_sum).mean()
-        print(f'Average litosphere density computed from model used : {rho_cr} kg/m3')
+    if rho_litho is None:
+        print((layers_mass_sum / weight_sum).std())
+        rho_litho = (layers_mass_sum / weight_sum).mean()
+        print(f'Average litosphere density computed from model used : {rho_litho} kg/m3')
 
     # compute density of last layer based on Pratt isostasy
-    rho_val = (layerVolume(Re,0,-1*D_p)*rho_cr - layers_mass)/(V_last)
+    rho_val = (layerVolume(Re,0,-1*D_p)*rho_litho - layers_mass)/(V_last)
+
+    return rho_val
+
+def compute_Pratt_compensation_weighted(Model : dict, rho_m0: float, sigma_m : float, sigma_litho : float, rho_litho=None):
+    Re = Model['Re']
+    # import last layer, needed separately
+    U_last, L_last, dens_last = import_layer(Model, Model['nlayers'])
+
+    if isinstance(L_last, np.ndarray):
+        if (L_last.max() - L_last.min()) < 1e-3:
+            D_p = abs(L_last.mean())
+        else:
+            raise ValueError('Last layer must be scalar or array with same values')
+    else:
+        D_p = abs(L_last)
+
+    
+
+    # sum of layer volumes and masses except last layer
+    layers_mass = 0
+    weight_sum = 0
+    for i in range(1, Model['nlayers']):
+        U, L, dens = import_layer(Model, i)
+        V = layerVolume(Re,U, L)
+        layers_mass += V * dens
+        weight_sum += V
+
+    # last layer volume
+    V_m = layerVolume(Re,U_last, L_last)
+    weight_sum += V_m
+
+    # get a priori density for last layer
+    if isinstance(dens_last, np.ndarray):
+        rho_last = dens_last.mean() if (dens_last.max()-dens_last.min()) < 1e-3 else (_ for _ in ()).throw(ValueError('Last layer density must be scalar or array with same values'))
+    else:
+        rho_last = dens_last
+
+    layers_mass_sum = layers_mass + rho_last * V_m
+
+    # compute average density of the litosphere from the model
+    if rho_litho is None:
+        print((layers_mass_sum / weight_sum).std())
+        rho_litho = (layers_mass_sum / weight_sum).mean()
+        print(f'Average litosphere density computed from model used : {rho_litho} kg/m3')
+
+    # compute density of last layer based on Pratt isostasy
+    V_litho = layerVolume(Re,0,-1*D_p)
+    rho_val = (rho_m0 * (V_litho**2) * (sigma_litho**2)  +  V_m * (sigma_m**2) * (V_litho * rho_litho - layers_mass))/(V_m**2 * (sigma_m**2) + (V_litho**2) * (sigma_litho)**2)
 
     return rho_val
 
