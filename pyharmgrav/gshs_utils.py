@@ -7,7 +7,7 @@ import rasterio as rio
 import re
 from pathlib import Path
 from .normal_grav_field import Ellipsoid
-from .read_SH_coeffs import read_bhsc, read_dat, read_mat
+from .read_SH_coeffs import read_bhsc, read_dat, read_mat, read_ICGEM_harmonics
 import warnings
 from .gshs_shbundle import gshs_point
 
@@ -63,7 +63,7 @@ def geod2geoc(lla: NDArray[np.float64], ellipsoid: Ellipsoid) -> NDArray[np.floa
     return np.concatenate((sph_lat, lla[:,1], r)).reshape(lla.shape, order='F')
 
 
-def read_shcs(shcs_data : str ,shcs_type : str ,nmin : int = 0,nmax : int|None = None,GM : float|None = None,R : float|None = None,ellipsoid : Ellipsoid|None = None) -> ph.shc.Shc:
+def read_shcs(shcs_data : str ,shcs_type : str ,nmin : int = 0,nmax : int|None = None,GM : float|None = None,R : float|None = None,ellipsoid : Ellipsoid|None = None,error: bool = False) -> dict[str, ph.shc.Shc | None]:
     """
     Read spherical harmonic coefficients (SHCs) from various file formats.
     Parameters
@@ -90,11 +90,15 @@ def read_shcs(shcs_data : str ,shcs_type : str ,nmin : int = 0,nmax : int|None =
         if it is not possible, defaults to value from GRS80 reference system. Default is None.
     ellipsoid : Ellipsoid, optional
         Ellipsoid object to extract default GM and R values from, GRS80 values are used if None. Default is None.
+    error : bool, optional
+        If true, reads error of coefficients, too. For now, only valid option for gfc files.
     Returns
     -------
-    shcs : Shc
-        Spherical harmonic coefficients object with degree and order up to nmax,
-        with coefficients below nmin set to zero if nmin > 0.
+    Tuple
+        Tuple with the loaded spherical harmonic coefficients and, optionally,
+        the corresponding error coefficients. It contains
+        - shcs          : ph.shc.Shc object containing SH coefficients.
+        - shcs_error    : ph.shc.Shc object containing error of SH coefficients, or None if not requested.
     Raises
     ------
     ValueError
@@ -105,10 +109,18 @@ def read_shcs(shcs_data : str ,shcs_type : str ,nmin : int = 0,nmax : int|None =
         If GM or R are provided and file containing coefficients also contains them (unnecessary, user-specified values ignored). 
         If GM or R are not provided file containing coefficients not contains them (defaults used).
     """
+    shcs_error = None
     if shcs_type.lower().strip() in ['gfc','bin','mtx','tbl','dov']: # read from file types recognised by PyHarm
         if (GM is not None) or (R is not None):
             warnings.warn('GM and R values are unnecessary for this file type, they are ignored in this case ...',UserWarning)
-        shcs = ph.shc.Shc.from_file(shcs_type, shcs_data, nmax)
+        if error:
+            if shcs_type != 'gfc':
+                raise ValueError('Can only read error for gfc files')
+            else:
+                shcs, shcs_error = read_ICGEM_harmonics(model_file=shcs_data,error=True,nmax=nmax)
+        else:
+            shcs = ph.shc.Shc.from_file(shcs_type, shcs_data, nmax)
+            
     elif shcs_type.lower().strip() == 'bshc': # read from bshc file (binary format used by Curtin University)
         if ((GM is None) or (R is None)): # need GM and R for gravity field synthesis, get default values if not provided
             warnings.warn("GM and R not provided, using default values",UserWarning)
@@ -145,8 +157,10 @@ def read_shcs(shcs_data : str ,shcs_type : str ,nmin : int = 0,nmax : int|None =
         m_index = m_index[m_index >= 0]
 
         shcs.set_coeffs(n_index,m_index,np.zeros(len(n_index),dtype=np.float64),np.zeros(len(n_index),dtype=np.float64))
+        if error:
+            shcs_error.set_coeffs(n_index,m_index,np.zeros(len(n_index),dtype=np.float64),np.zeros(len(n_index),dtype=np.float64))
 
-    return shcs
+    return (shcs, shcs_error)
 
 
 def interpolate_from_raster(raster_file: str, x: NDArray, y: NDArray) -> NDArray:
@@ -546,7 +560,7 @@ def SH_synthesis(points : ph.crd.PointGrid|ph.crd.PointSctr,shcs : ph.shc.Shc,po
 
             if DTM_shcs_data is not None:
                 DTM_shcs_type = splitext(DTM_shcs_data)[1][1:]  # remove the dot
-                DTM_shcs = read_shcs(DTM_shcs_data,DTM_shcs_type,0,nmax,ellipsoid=ellipsoid,GM=1,R=1)
+                DTM_shcs = read_shcs(DTM_shcs_data,DTM_shcs_type,0,nmax,ellipsoid=ellipsoid,GM=1,R=1)[0]
                 radius = points.r
                 radius_topo = radius.copy()
                 radius_topo[:] = DTM_shcs.r # r is also set to 1 in shcs for topography synthesis, so upward continuation term becomes 1

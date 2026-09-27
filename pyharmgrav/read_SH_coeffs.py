@@ -163,9 +163,9 @@ def read_ICGEM_harmonics(
         full path to gfc spherical harmonic data file
     error : bool, default False
         Flag to read error of coefficients from gfc file or values only
-    LMAX: int or NoneType, default None
+    nmax: int or NoneType, default None
         maximum degree and order of output spherical harmonics
-    FLAG: str, default 'gfc'
+    : str, default 'gfc'
         Flag denoting data lines
 
     Returns
@@ -180,11 +180,11 @@ def read_ICGEM_harmonics(
             Spherical harmonic coefficients
     """
     # set default keyword argument
-    kwargs.setdefault('FLAG', 'gfc')
+    kwargs.setdefault('flag', 'gfc')
 
     model_params =  {}
     # read gravity field coefficients file
-    with open(model_file, mode='r', encoding='utf8') as f:
+    with open(model_file, mode='r') as f:
         file_contents = f.read().splitlines()
     # extract parameters from header
     header_parameters = [
@@ -199,7 +199,7 @@ def read_ICGEM_harmonics(
         line_contents = line.split()
         model_params[line_contents[0]] = line_contents[1]
     # set degree of truncation from model if not presently set
-    LMAX = kwargs.get('LMAX') or np.int64(model_params['max_degree'])
+    LMAX = kwargs.get('nmax') or np.int64(model_params['max_degree'])
     # update maximum degree attribute if truncating
     if LMAX != np.int64(model_params['max_degree']):
         model_params['max_degree'] = str(LMAX)
@@ -214,7 +214,7 @@ def read_ICGEM_harmonics(
         eslm = np.zeros((LMAX + 1, LMAX + 1))
 
     # reduce file_contents to input data using data marker flag
-    input_data = [l for l in file_contents if re.match(kwargs['FLAG'], l)]
+    input_data = [l for l in file_contents if re.match(kwargs['flag'], l)]
     # for each line of data in the gravity file
     for line in input_data:
         # split the line into individual components replacing fortran d
@@ -239,9 +239,9 @@ def read_ICGEM_harmonics(
         E_S_out = eslm.T[mask_out.T]
     GM = model_params['earth_gravity_constant']
     R = model_params['radius']
-    SHCs = ph.shc.Shc.from_arrays(LMAX,C_out,S_out,GM,R)
+    SHCs = ph.shc.Shc.from_arrays(nmax=LMAX,c=C_out,s=S_out,mu=np.float64(GM),r=np.float64(R))
     if error:
-        SHCs.error = ph.shc.Shc.from_arrays(LMAX,E_C_out,E_S_out,GM,R)
-        return SHCs, SHCs.error
+        SHCs_error = ph.shc.Shc.from_arrays(nmax=LMAX,c=E_C_out,s=E_S_out,mu=np.float64(GM),r=np.float64(R))
+        return SHCs, SHCs_error
     else:
         return SHCs

@@ -197,7 +197,7 @@ def _gshs_point_serial(lat : np.ndarray,lon : np.ndarray,r : np.ndarray|float,sh
         degrees = n[m:]
         Cnm = C_nm_all[m:, m]
         Snm = S_nm_all[m:, m]
-        TF = tl[None, :] * (R / r[:, None]) ** (tl[None, :])
+        TF = tf[None, :] * (R / r[:, None]) ** (tl[None, :])
         TFP = TF[:, m:] * assoc_legendre(degrees, theRAD, order=m)
 
         if error:

@@ -1,13 +1,13 @@
 import pyharm as ph
 import numpy as np
-from .gshs_utils import read_shcs, geod2geoc, SH_synthesis, tide_system_convert
+from .gshs_utils import read_shcs, geod2geoc, SH_synthesis, tide_system_convert, SH_error_synthesis
 from os.path import splitext
 from .normal_grav_field import Ellipsoid
 from .gshs_utils import interpolate_from_raster
 from numpy.typing import NDArray
 
 ### FUNCTION FOR SH SYNTHESIS AT POINT
-def point_sh_synthesis(points : NDArray,shcs_data : str | ph.shc.Shc , points_type : str, quantity : str, nmin : int = 0, nmax : int|None = None, ellipsoid : str|list|tuple|dict|None = None, GM : float|None = None, R : float|None = None, DTM_shcs_data : str|None = None, DTM_raster : str|None = None, tide_system_conversion : list|tuple|None = None, normal_field_removed : bool = False) -> NDArray:
+def point_sh_synthesis(points : NDArray,shcs_data : str | ph.shc.Shc , points_type : str, quantity : str, nmin : int = 0, nmax : int|None = None, ellipsoid : str|list|tuple|dict|None = None, GM : float|None = None, R : float|None = None, DTM_shcs_data : str|None = None, DTM_raster : str|None = None, tide_system_conversion : list|tuple|None = None, normal_field_removed : bool = False,compute_error: bool = False) -> NDArray:
     """Compute spherical harmonic synthesis at scattered points.
 
     Evaluate gravity-field functionals such as potential, gravity, gradients,
@@ -80,11 +80,11 @@ def point_sh_synthesis(points : NDArray,shcs_data : str | ph.shc.Shc , points_ty
         been removed from the coefficients.
     :type normal_field_removed: bool
 
-    :return: Computed quantity at the input points. Scalar outputs are
-        returned as 1D arrays with length equal to the number of points.
-        The gravity-vector quantity ``'g'`` has shape
-        ``(n_points, 3)`` in north-east-down components.
-    :rtype: numpy.ndarray
+    :return: 
+    Tuple of computed quantity and its errors (None if not computed) at the input points.
+    Scalar outputs are returned as 1D arrays with length equal to the number of points (or None).
+    The gravity-vector quantity ``'g'`` has shape ``(n_points, 3)`` in north-east-down components.
+    :rtype: tuple[numpy.ndarray, numpy.ndarray|None]]
     """
     # HANDLE DEFAULT VALUES FOR OPTIONAL PARAMETERS ------------------------------------------------------------------
     if ellipsoid is not None:
@@ -93,6 +93,8 @@ def point_sh_synthesis(points : NDArray,shcs_data : str | ph.shc.Shc , points_ty
     if isinstance(shcs_data, str):
         # get shcs_type from file extension
         shcs_type = splitext(shcs_data)[1][1:]  # remove the dot
+        if shcs_type != 'gfc' and compute_error :
+            raise ValueError('Can only compute error if gfc file given')
         if shcs_type not in ['gfc','dat','bshc','bin','mtx','tbl','dov','mat']:   # rewrite if new format added
             raise ValueError("Not recognised file format. it must be one of these: 'gfc','dat','bshc','bin','mtx','tbl','dov','mat'  ")
         # get nmax from file if not provided and parser requires it    
@@ -102,11 +104,11 @@ def point_sh_synthesis(points : NDArray,shcs_data : str | ph.shc.Shc , points_ty
             GM =  1.0
             R =  1.0
         # READ SH COEFFICIENTS FROM FILE------------------------------------------------------------------------------------
-
+        shcs_error = None
         if shcs_type.lower().strip() in ['gfc','bin','mtx','tbl','dov']:
-            shcs = read_shcs(shcs_data,shcs_type,nmin,nmax,None,None,ellipsoid)
+            shcs,shcs_error = read_shcs(shcs_data,shcs_type,nmin,nmax,None,None,ellipsoid,error=compute_error)
         else:
-            shcs = read_shcs(shcs_data,shcs_type,nmin,nmax,GM,R,ellipsoid)
+            shcs = read_shcs(shcs_data,shcs_type,nmin,nmax,GM,R,ellipsoid)[0]
     elif isinstance(shcs_data,ph.shc.Shc):
         shcs = ph.shc.Shc.from_copy(shcs_data)
     else:
@@ -161,12 +163,15 @@ def point_sh_synthesis(points : NDArray,shcs_data : str | ph.shc.Shc , points_ty
     # SYNTHESIS OF DIFFERENT QUANTITIES -------------------------------------------------------------------------------
     # synthesis moved to separate function and handle grid setup,  synthesis function is generalized for both scatttered points and grid
     result = SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data,topo_heights,lat_ell,h_ell,normal_field_removed)
+    result_error = None
+    if compute_error:
+        result_error = SH_error_synthesis(points=points,shcs=shcs_error,quantity=quantity,nmax=nmax)
     if geoid_corr is not None:
         result += geoid_corr    
-    return result
+    return (result, result_error)
 
 ### FUNCTION FOR SH SYNTHESIS ON GRID
-def grid_sh_synthesis(quantity : str, min_lat : float, max_lat : float, min_lon : float, max_lon : float, resolution : float|list[float]|tuple[float], shcs_data : str | ph.shc.Shc, resolution_unit : str = 'degrees', nmin : int = 0, nmax : int|None = None, ellipsoid : str|list|tuple|dict|None = None,ref_surface_type : str = 'ellipsoid', height : float = 0,GM : float|None = None, R : float|None = None, DTM_shcs_data : str|None =None, DTM_raster : str|None = None, tide_system_conversion : list|tuple|None = None, normal_field_removed : bool = False):
+def grid_sh_synthesis(quantity : str, min_lat : float, max_lat : float, min_lon : float, max_lon : float, resolution : float|list[float]|tuple[float], shcs_data : str | ph.shc.Shc, resolution_unit : str = 'degrees', nmin : int = 0, nmax : int|None = None, ellipsoid : str|list|tuple|dict|None = None,ref_surface_type : str = 'ellipsoid', height : float = 0,GM : float|None = None, R : float|None = None, DTM_shcs_data : str|None =None, DTM_raster : str|None = None, tide_system_conversion : list|tuple|None = None, normal_field_removed : bool = False,compute_error : bool=False):
     """Compute spherical harmonic synthesis on a regular grid.
 
     Evaluate potential, gravity, gravity gradients, geoid undulation, and
@@ -251,11 +256,12 @@ def grid_sh_synthesis(quantity : str, min_lat : float, max_lat : float, min_lon 
         been removed from the coefficients.
     :type normal_field_removed: bool
 
-    :return: A two-element tuple containing the synthesized values and a
+    :return: A 3-element tuple containing the synthetized values, errors of synthetized values (None if not computed) and a
         coordinate dictionary. The dictionary contains ``'latitude'`` and
         ``'longitude'`` arrays in degrees.
-    :rtype: tuple[numpy.ndarray, dict[str, numpy.ndarray]]
+    :rtype: tuple[numpy.ndarray, numpy.ndarray|None, dict[str, numpy.ndarray]]
     """
+    
     if quantity == 'g':
         raise ValueError(
             "grid_sh_synthesis does not support the three-component 'g' vector"
@@ -265,9 +271,12 @@ def grid_sh_synthesis(quantity : str, min_lat : float, max_lat : float, min_lon 
     if ellipsoid is not None:
         ellipsoid  = Ellipsoid(ellipsoid)
 
+    shcs_error = None
     if isinstance(shcs_data, str):
         # get shcs_type from file extension
         shcs_type = splitext(shcs_data)[1][1:]  # remove the dot
+        if shcs_type != 'gfc' and compute_error :
+            raise ValueError('Can only compute error if gfc file given')
         if shcs_type not in ['gfc','dat','bshc','bin','mtx','tbl','dov','mat']:   # rewrite if new format added
             raise ValueError("Not recognised file format. it must be one of these: 'gfc','dat','bshc','bin','mtx','tbl','dov','mat' ")
         # get nmax from file if not provided and parser requires it    
@@ -279,7 +288,7 @@ def grid_sh_synthesis(quantity : str, min_lat : float, max_lat : float, min_lon 
         
         # READ SH COEFFICIENTS FROM FILE------------------------------------------------------------------------------------
         if shcs_type.lower().strip() in ['gfc','bin','mtx','tbl','dov']:
-            shcs = read_shcs(shcs_data,shcs_type,nmin,nmax,None,None,ellipsoid)
+            shcs,shcs_error = read_shcs(shcs_data,shcs_type,nmin,nmax,None,None,ellipsoid,error=compute_error)
         else:
             shcs = read_shcs(shcs_data,shcs_type,nmin,nmax,GM,R,ellipsoid)
     elif isinstance(shcs_data,ph.shc.Shc):
@@ -373,6 +382,9 @@ def grid_sh_synthesis(quantity : str, min_lat : float, max_lat : float, min_lon 
     else:
         coords = {'latitude': np.degrees(latitudes), 'longitude': np.degrees(longitudes)}
     result = SH_synthesis(points,shcs,points_type,quantity,nmin,nmax,ellipsoid,DTM_shcs_data,topo_heights,lat_ell,h_ell,normal_field_removed)
+    result_error = None
+    if compute_error:
+        result_error = SH_error_synthesis(points=points,shcs=shcs_error,nmax=nmax)
     if geoid_corr is not None:
         result += geoid_corr    
-    return result,  coords
+    return (result, result_error, coords)

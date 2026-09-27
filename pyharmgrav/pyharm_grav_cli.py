@@ -5,47 +5,39 @@ from pathlib import Path
 import numpy as np
 
 from .gshs import grid_sh_synthesis, point_sh_synthesis
+from os.path import splitext
 
 
-GRID_SYNTHESIS_PARAMETERS = (
-    'quantity', 'min_lat', 'max_lat', 'min_lon', 'max_lon', 'resolution',
-    'shcs_data', 'resolution_unit', 'nmin', 'nmax', 'ellipsoid',
-    'ref_surface_type', 'height', 'GM', 'R', 'DTM_shcs_data', 'DTM_raster',
-    'tide_system_conversion', 'normal_field_removed',
-)
+GRID_SYNTHESIS_PARAMETERS = ('quantity', 'min_lat', 'max_lat', 'min_lon', 'max_lon', 'resolution','shcs_data', 'resolution_unit',
+                            'nmin', 'nmax', 'ellipsoid','ref_surface_type', 'height', 'GM', 'R', 'DTM_shcs_data', 'DTM_raster',
+                            'tide_system_conversion', 'normal_field_removed', 'compute_error')
+
 GRID_CLI_PARAMETERS = GRID_SYNTHESIS_PARAMETERS + ('output_file',)
-GRID_REQUIRED_PARAMETERS = (
-    'quantity', 'min_lat', 'max_lat', 'min_lon', 'max_lon', 'resolution',
-    'shcs_data', 'output_file',
-)
 
-POINT_SYNTHESIS_PARAMETERS = (
-    'shcs_data', 'points_type', 'quantity', 'nmin', 'nmax', 'ellipsoid',
-    'GM', 'R', 'DTM_shcs_data', 'DTM_raster', 'tide_system_conversion',
-    'normal_field_removed',
-)
-POINT_CLI_PARAMETERS = (
-    'input_file', 'points_type', 'shcs_data', 'quantity', 'nmin', 'nmax',
-    'ellipsoid', 'GM', 'R', 'DTM_shcs_data', 'DTM_raster', 'point_numbers',
-    'tide_system_conversion', 'output_file', 'normal_field_removed',
-)
-POINT_REQUIRED_PARAMETERS = (
-    'input_file', 'points_type', 'shcs_data', 'quantity', 'output_file',
-)
+GRID_REQUIRED_PARAMETERS = ('quantity', 'min_lat', 'max_lat', 'min_lon', 'max_lon', 'resolution',
+                            'shcs_data', 'output_file', 'normal_field_removed', 'compute_error')
+
+POINT_SYNTHESIS_PARAMETERS = ('shcs_data', 'points_type', 'quantity', 'nmin', 'nmax', 'ellipsoid','GM', 'R', 'DTM_shcs_data',
+                               'DTM_raster', 'tide_system_conversion', 'normal_field_removed', 'compute_error')
+
+POINT_CLI_PARAMETERS = ('input_file', 'points_type', 'shcs_data', 'quantity', 'nmin', 'nmax','ellipsoid', 'GM', 'R', 'DTM_shcs_data',
+      'DTM_raster', 'point_numbers','tide_system_conversion', 'output_file', 'normal_field_removed', 'compute_error')
+
+POINT_REQUIRED_PARAMETERS = ('input_file', 'points_type', 'shcs_data', 'quantity', 'output_file', 'normal_field_removed', 'compute_error' )
 
 
-def _parse_bool(value):
-    """Parse common command-line boolean representations."""
-    if isinstance(value, bool):
-        return value
-    normalized = value.casefold()
-    if normalized in {'1', 'true', 'yes', 'on'}:
-        return True
-    if normalized in {'0', 'false', 'no', 'off'}:
-        return False
-    raise argparse.ArgumentTypeError(
-        f"expected a boolean value, received {value!r}"
-    )
+#def _parse_bool(value):
+#    """Parse common command-line boolean representations."""
+#    if isinstance(value, bool):
+#        return value
+#    normalized = value.casefold()
+#    if normalized in {'1', 'true', 'yes', 'on'}:
+#        return True
+#    if normalized in {'0', 'false', 'no', 'off'}:
+#        return False
+#    raise argparse.ArgumentTypeError(
+#        f"expected a boolean value, received {value!r}"
+#    )
 
 
 def load_config(config_file):
@@ -141,7 +133,10 @@ def _write_grid_output(outfile, result, coords, quantity):
 
 
 def calc_grid(params):
-    print('Grid synthesis')
+    if params['compute_error']:
+        print('Point synthesis with error estimate')
+    else:
+        print('Point synthesis')
     _validate_params(
         params, GRID_CLI_PARAMETERS, GRID_REQUIRED_PARAMETERS
     )
@@ -157,11 +152,17 @@ def calc_grid(params):
         for name in GRID_SYNTHESIS_PARAMETERS
         if name in params
     }
-    result, coords = grid_sh_synthesis(**synthesis_params)
+    result, result_error, coords = grid_sh_synthesis(**synthesis_params)
+
     result = _normalize_grid_result(result, coords)
-    _write_grid_output(
-        params['output_file'], result, coords, params['quantity']
-    )
+    _write_grid_output(params['output_file'], result, coords, params['quantity'])
+
+    if result_error is not None:
+        result_error = _normalize_grid_result(result_error, coords)
+        base,ext = splitext(params['output_file'])
+        outfile_err = base + '_err' + ext
+        _write_grid_output(outfile_err, result_error, coords, params['quantity'])
+
 
 def _normalize_point_result(result, n_points, quantity):
     result = np.asarray(result)
@@ -175,7 +176,10 @@ def _normalize_point_result(result, n_points, quantity):
 
 
 def calc_point(params):
-    print('Point synthesis')
+    if params['compute_error']:
+        print('Point synthesis with error estimate')
+    else:
+        print('Point synthesis')
     _validate_params(
         params, POINT_CLI_PARAMETERS, POINT_REQUIRED_PARAMETERS
     )
@@ -212,29 +216,44 @@ def calc_point(params):
         if name in params and name != 'quantity'
     }
     result_columns = []
+    result_columns_err = []
     for quantity in quantities:
         synthesis_params = base_params.copy()
         synthesis_params['points'] = point_coords.copy()
         synthesis_params['quantity'] = quantity
-        result_temp = point_sh_synthesis(**synthesis_params)
+        result_temp,result_temp_err = point_sh_synthesis(**synthesis_params)
         result_columns.append(
             _normalize_point_result(
                 result_temp, point_coords.shape[0], quantity
             )
         )
+        if result_temp_err is not None:
+            result_columns_err.append(
+                    _normalize_point_result(
+                    result_temp_err, point_coords.shape[0], quantity
+                )
+            )
     result = np.hstack(result_columns)
+    if len(result_columns_err)>0:
+        result_err = np.hstack(result_columns_err)
 
     if point_coords.shape[1] == 2:
         height = np.zeros((data_in_file.shape[0], 1))
         data_in_file = np.hstack((data_in_file, height))
 
     output_array = np.hstack((data_in_file, result))
+    if len(result_columns_err)>0:
+        output_array_err = np.hstack((data_in_file, result_err))
     if point_numbers:
         out_format = ['%d', '%.8f', '%.8f', '%.3f']
     else:
         out_format = ['%.8f', '%.8f', '%.3f']
     out_format.extend(['%.12e'] * result.shape[1])
     np.savetxt(output_file, output_array, fmt=out_format)
+    if len(result_columns_err)>0:
+        base,ext = splitext(output_file)
+        output_file_err = base + '_err' + ext
+        np.savetxt(output_file_err , output_array_err, fmt=out_format)
 
 
 
@@ -265,18 +284,16 @@ def build_parser():
     parser_grid.add_argument('--DTM_raster',type=str)
     parser_grid.add_argument('--tide_system_conversion',type=str,nargs=2)
     parser_grid.add_argument('--output_file',type=str)
-    parser_grid.add_argument(
-        '--normal_field_removed',
-        nargs='?',
-        const=True,
-        type=_parse_bool,
-        default=False,
-    )
+    parser_grid.add_argument('--normal_field_removed', action='store_true')
+    parser_grid.add_argument('--compute_error', action='store_true')
+
 
     parser_grid.set_defaults(
         handler=calc_grid,
         parameter_names=GRID_CLI_PARAMETERS,
         required_names=GRID_REQUIRED_PARAMETERS,
+        normal_field_removed = False,
+        compute_error = False
     )
 
     parser_point = subparsers.add_parser('point',help='Compute at scattered points')
@@ -294,22 +311,20 @@ def build_parser():
     parser_point.add_argument('--R',type=float)
     parser_point.add_argument('--DTM_shcs_data',type=str)
     parser_point.add_argument('--DTM_raster',type=str)
-    parser_point.add_argument('--point_numbers', action='store_true', default=True)
+    parser_point.add_argument('--point_numbers', action='store_true')
     parser_point.add_argument('--no_point_numbers', action='store_false', dest='point_numbers')
     parser_point.add_argument('--tide_system_conversion',type=str,nargs=2)
     parser_point.add_argument('--output_file',type=str)
-    parser_point.add_argument(
-        '--normal_field_removed',
-        nargs='?',
-        const=True,
-        type=_parse_bool,
-        default=False,
-    )
+    parser_point.add_argument('--normal_field_removed', action='store_true')
+    parser_point.add_argument('--compute_error', action='store_true')
 
     parser_point.set_defaults(
         handler=calc_point,
         parameter_names=POINT_CLI_PARAMETERS,
         required_names=POINT_REQUIRED_PARAMETERS,
+        normal_field_removed= False,
+        compute_error = False,
+        point_numbers = True
     )
     return parser
 
