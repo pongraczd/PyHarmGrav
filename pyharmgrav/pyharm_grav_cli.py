@@ -26,20 +26,6 @@ POINT_CLI_PARAMETERS = ('input_file', 'points_type', 'shcs_data', 'quantity', 'n
 POINT_REQUIRED_PARAMETERS = ('input_file', 'points_type', 'shcs_data', 'quantity', 'output_file', 'normal_field_removed', 'compute_error' )
 
 
-#def _parse_bool(value):
-#    """Parse common command-line boolean representations."""
-#    if isinstance(value, bool):
-#        return value
-#    normalized = value.casefold()
-#    if normalized in {'1', 'true', 'yes', 'on'}:
-#        return True
-#    if normalized in {'0', 'false', 'no', 'off'}:
-#        return False
-#    raise argparse.ArgumentTypeError(
-#        f"expected a boolean value, received {value!r}"
-#    )
-
-
 def load_config(config_file):
     params = {}
     try:
