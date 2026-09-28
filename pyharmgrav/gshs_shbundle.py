@@ -166,12 +166,12 @@ def _gshs_point_serial(lat : np.ndarray,lon : np.ndarray,r : np.ndarray|float,sh
     sin_lon = np.sin(lon)
     cos_m_lon = np.ones(len(lon))
     sin_m_lon = np.zeros(len(lon))
-
+    
     if quantity == 'none':
-        tk = np.ones(n.shape)
+        tk = 1
         tf = np.ones(n.shape)
         tl = n
-    if quantity == 'potential':
+    elif quantity == 'potential':
         tk = GM / R
         tf = np.ones(n.shape)
         tl = n + 1
